@@ -1,12 +1,14 @@
 import { ScreenBounds, ScreenPoint } from '../../../shared/types/action';
 import { desktopCapturer } from 'electron';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { resolveNativeInputExe } from './InputControlService';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface ScreenMetrics {
   width: number;
@@ -55,8 +57,52 @@ export class ScreenCaptureService {
     return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
   }
 
+  public async getCursorVerificationStatus(): Promise<{
+    available: boolean;
+    interactive: boolean;
+    desktop: string;
+    reason?: string;
+  }> {
+    if (process.platform !== 'win32') {
+      return { available: true, interactive: true, desktop: 'default' };
+    }
+    const exe = resolveNativeInputExe();
+    if (exe) {
+      try {
+        const { stdout } = await execFileAsync(exe, ['status'], { timeout: 2000 });
+        const interactive = stdout.includes('STATUS:INTERACTIVE');
+        const attached = stdout.includes('ATTACHED:True');
+        const match = stdout.match(/DESKTOP:([^|]+)/);
+        const desktop = match ? match[1] : 'unknown';
+        return {
+          available: interactive && attached,
+          interactive,
+          desktop,
+          reason: interactive && attached ? undefined : `Desktop is not attached (${desktop})`
+        };
+      } catch (err: any) {
+        return { available: false, interactive: false, desktop: 'error', reason: err.message };
+      }
+    }
+    return { available: false, interactive: false, desktop: 'unknown', reason: 'Native utility missing' };
+  }
+
   public async getCursorPosition(): Promise<ScreenPoint> {
     if (process.platform === 'win32') {
+      const exe = resolveNativeInputExe();
+      if (exe) {
+        try {
+          const { stdout } = await execFileAsync(exe, ['getpos'], { timeout: 2000 });
+          const match = stdout.match(/POS:(-?\d+),(-?\d+)/);
+          if (match) {
+            return {
+              x: parseInt(match[1], 10),
+              y: parseInt(match[2], 10)
+            };
+          }
+        } catch (err) {}
+      }
+
       try {
         const psCommand = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position.X.ToString() + ',' + [System.Windows.Forms.Cursor]::Position.Y.ToString()"`;
         const { stdout } = await execAsync(psCommand, { timeout: 2000 });

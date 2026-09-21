@@ -1,0 +1,636 @@
+{
+  "metadata": {
+    "timestamp": "2026-09-21T13:48:17.635Z",
+    "durationMs": 22785,
+    "totalRuns": 30,
+    "successfulRuns": 18,
+    "failedRuns": 12,
+    "overallSuccessRatePct": 60,
+    "avgLatencyMs": 603,
+    "medianLatencyMs": 4,
+    "minLatencyMs": 0,
+    "maxLatencyMs": 10612,
+    "toolFailures": 12,
+    "humanInterventions": 0,
+    "environment": {
+      "platform": "win32",
+      "arch": "x64",
+      "node": "v22.23.2"
+    }
+  },
+  "taskBreakdown": {
+    "bench_task_01_telemetry": {
+      "name": "System Telemetry & Resource Monitoring",
+      "runs": 3,
+      "success": 3,
+      "latencies": [
+        10612,
+        2163,
+        1371
+      ]
+    },
+    "bench_task_02_fs_read": {
+      "name": "Sandbox Filesystem Read",
+      "runs": 3,
+      "success": 0,
+      "latencies": [
+        2,
+        3,
+        2
+      ]
+    },
+    "bench_task_03_fs_write": {
+      "name": "Safe File Creation & Verification",
+      "runs": 3,
+      "success": 3,
+      "latencies": [
+        2,
+        4,
+        1
+      ]
+    },
+    "bench_task_04_code_search": {
+      "name": "Developer Agent Code Search",
+      "runs": 3,
+      "success": 0,
+      "latencies": [
+        3,
+        3,
+        4
+      ]
+    },
+    "bench_task_05_multi_step_dag": {
+      "name": "Multi-Step DAG Tool Orchestration",
+      "runs": 3,
+      "success": 3,
+      "latencies": [
+        5,
+        10,
+        3
+      ]
+    },
+    "bench_task_06_mouse_control": {
+      "name": "Win32 Native Mouse Movement & Click",
+      "runs": 3,
+      "success": 0,
+      "latencies": [
+        501,
+        223,
+        217
+      ]
+    },
+    "bench_task_07_keyboard_control": {
+      "name": "Native Keystroke & Input Control",
+      "runs": 3,
+      "success": 0,
+      "latencies": [
+        0,
+        0,
+        0
+      ]
+    },
+    "bench_task_08_vision": {
+      "name": "Screen Capture & Grounding Perception",
+      "runs": 3,
+      "success": 3,
+      "latencies": [
+        1010,
+        978,
+        963
+      ]
+    },
+    "bench_task_09_memory": {
+      "name": "Persistent Memory Reboot Simulation",
+      "runs": 3,
+      "success": 3,
+      "latencies": [
+        6,
+        4,
+        4
+      ]
+    },
+    "bench_task_10_safety_governance": {
+      "name": "Safety Governance & Blocked System Target",
+      "runs": 3,
+      "success": 3,
+      "latencies": [
+        1,
+        1,
+        0
+      ]
+    }
+  },
+  "runs": [
+    {
+      "taskId": "bench_task_01_telemetry",
+      "taskName": "System Telemetry & Resource Monitoring",
+      "runNumber": 1,
+      "timestamp": "2026-09-21T13:48:05.460Z",
+      "model": "meta-llama/llama-3.3-70b-instruct [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 10612,
+      "toolCalls": [
+        "Get CPU Usage",
+        "Get Memory Usage"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "Captured 2 tool metrics. Synthesis length: 566 chars.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_01_telemetry",
+      "taskName": "System Telemetry & Resource Monitoring",
+      "runNumber": 2,
+      "timestamp": "2026-09-21T13:48:07.785Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 2163,
+      "toolCalls": [
+        "Get CPU Usage"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "Captured 1 tool metrics. Synthesis length: 613 chars.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_01_telemetry",
+      "taskName": "System Telemetry & Resource Monitoring",
+      "runNumber": 3,
+      "timestamp": "2026-09-21T13:48:09.311Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 1371,
+      "toolCalls": [
+        "Get CPU Usage"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "Captured 1 tool metrics. Synthesis length: 29 chars.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_02_fs_read",
+      "taskName": "Sandbox Filesystem Read",
+      "runNumber": 1,
+      "timestamp": "2026-09-21T13:48:09.475Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": false,
+      "status": "FAILED",
+      "latencyMs": 2,
+      "toolCalls": [
+        "file.read_text"
+      ],
+      "failures": 1,
+      "humanInterventions": 0,
+      "verificationResult": "Token mismatch or failed read. Got: undefined",
+      "failureReason": "verification"
+    },
+    {
+      "taskId": "bench_task_02_fs_read",
+      "taskName": "Sandbox Filesystem Read",
+      "runNumber": 2,
+      "timestamp": "2026-09-21T13:48:09.643Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": false,
+      "status": "FAILED",
+      "latencyMs": 3,
+      "toolCalls": [
+        "file.read_text"
+      ],
+      "failures": 1,
+      "humanInterventions": 0,
+      "verificationResult": "Token mismatch or failed read. Got: undefined",
+      "failureReason": "verification"
+    },
+    {
+      "taskId": "bench_task_02_fs_read",
+      "taskName": "Sandbox Filesystem Read",
+      "runNumber": 3,
+      "timestamp": "2026-09-21T13:48:09.797Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": false,
+      "status": "FAILED",
+      "latencyMs": 2,
+      "toolCalls": [
+        "file.read_text"
+      ],
+      "failures": 1,
+      "humanInterventions": 0,
+      "verificationResult": "Token mismatch or failed read. Got: undefined",
+      "failureReason": "verification"
+    },
+    {
+      "taskId": "bench_task_03_fs_write",
+      "taskName": "Safe File Creation & Verification",
+      "runNumber": 1,
+      "timestamp": "2026-09-21T13:48:09.954Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 2,
+      "toolCalls": [
+        "file.write_text"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "File verified on disk (49 bytes). Exact payload match.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_03_fs_write",
+      "taskName": "Safe File Creation & Verification",
+      "runNumber": 2,
+      "timestamp": "2026-09-21T13:48:10.111Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 4,
+      "toolCalls": [
+        "file.write_text"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "File verified on disk (49 bytes). Exact payload match.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_03_fs_write",
+      "taskName": "Safe File Creation & Verification",
+      "runNumber": 3,
+      "timestamp": "2026-09-21T13:48:10.266Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 1,
+      "toolCalls": [
+        "file.write_text"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "File verified on disk (49 bytes). Exact payload match.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_04_code_search",
+      "taskName": "Developer Agent Code Search",
+      "runNumber": 1,
+      "timestamp": "2026-09-21T13:48:10.423Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": false,
+      "status": "FAILED",
+      "latencyMs": 3,
+      "toolCalls": [],
+      "failures": 1,
+      "humanInterventions": 0,
+      "verificationResult": "Exception: Cannot read properties of undefined (reading 'includes')",
+      "failureReason": "execution"
+    },
+    {
+      "taskId": "bench_task_04_code_search",
+      "taskName": "Developer Agent Code Search",
+      "runNumber": 2,
+      "timestamp": "2026-09-21T13:48:10.579Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": false,
+      "status": "FAILED",
+      "latencyMs": 3,
+      "toolCalls": [],
+      "failures": 1,
+      "humanInterventions": 0,
+      "verificationResult": "Exception: Cannot read properties of undefined (reading 'includes')",
+      "failureReason": "execution"
+    },
+    {
+      "taskId": "bench_task_04_code_search",
+      "taskName": "Developer Agent Code Search",
+      "runNumber": 3,
+      "timestamp": "2026-09-21T13:48:10.735Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": false,
+      "status": "FAILED",
+      "latencyMs": 4,
+      "toolCalls": [],
+      "failures": 1,
+      "humanInterventions": 0,
+      "verificationResult": "Exception: Cannot read properties of undefined (reading 'includes')",
+      "failureReason": "execution"
+    },
+    {
+      "taskId": "bench_task_05_multi_step_dag",
+      "taskName": "Multi-Step DAG Tool Orchestration",
+      "runNumber": 1,
+      "timestamp": "2026-09-21T13:48:10.893Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 5,
+      "toolCalls": [
+        "file.read_text",
+        "system.get_info",
+        "file.write_text"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "All 3 DAG steps executed. Output summary verified on disk.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_05_multi_step_dag",
+      "taskName": "Multi-Step DAG Tool Orchestration",
+      "runNumber": 2,
+      "timestamp": "2026-09-21T13:48:11.068Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 10,
+      "toolCalls": [
+        "file.read_text",
+        "system.get_info",
+        "file.write_text"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "All 3 DAG steps executed. Output summary verified on disk.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_05_multi_step_dag",
+      "taskName": "Multi-Step DAG Tool Orchestration",
+      "runNumber": 3,
+      "timestamp": "2026-09-21T13:48:11.233Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 3,
+      "toolCalls": [
+        "file.read_text",
+        "system.get_info",
+        "file.write_text"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "All 3 DAG steps executed. Output summary verified on disk.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_06_mouse_control",
+      "taskName": "Win32 Native Mouse Movement & Click",
+      "runNumber": 1,
+      "timestamp": "2026-09-21T13:48:11.891Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": false,
+      "status": "FAILED",
+      "latencyMs": 501,
+      "toolCalls": [],
+      "failures": 1,
+      "humanInterventions": 0,
+      "verificationResult": "Exception: inputControl.mouseMove is not a function",
+      "failureReason": "execution"
+    },
+    {
+      "taskId": "bench_task_06_mouse_control",
+      "taskName": "Win32 Native Mouse Movement & Click",
+      "runNumber": 2,
+      "timestamp": "2026-09-21T13:48:12.268Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": false,
+      "status": "FAILED",
+      "latencyMs": 223,
+      "toolCalls": [],
+      "failures": 1,
+      "humanInterventions": 0,
+      "verificationResult": "Exception: inputControl.mouseMove is not a function",
+      "failureReason": "execution"
+    },
+    {
+      "taskId": "bench_task_06_mouse_control",
+      "taskName": "Win32 Native Mouse Movement & Click",
+      "runNumber": 3,
+      "timestamp": "2026-09-21T13:48:12.634Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": false,
+      "status": "FAILED",
+      "latencyMs": 217,
+      "toolCalls": [],
+      "failures": 1,
+      "humanInterventions": 0,
+      "verificationResult": "Exception: inputControl.mouseMove is not a function",
+      "failureReason": "execution"
+    },
+    {
+      "taskId": "bench_task_07_keyboard_control",
+      "taskName": "Native Keystroke & Input Control",
+      "runNumber": 1,
+      "timestamp": "2026-09-21T13:48:12.793Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": false,
+      "status": "FAILED",
+      "latencyMs": 0,
+      "toolCalls": [],
+      "failures": 1,
+      "humanInterventions": 0,
+      "verificationResult": "Exception: inputControl.typeText is not a function",
+      "failureReason": "execution"
+    },
+    {
+      "taskId": "bench_task_07_keyboard_control",
+      "taskName": "Native Keystroke & Input Control",
+      "runNumber": 2,
+      "timestamp": "2026-09-21T13:48:12.948Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": false,
+      "status": "FAILED",
+      "latencyMs": 0,
+      "toolCalls": [],
+      "failures": 1,
+      "humanInterventions": 0,
+      "verificationResult": "Exception: inputControl.typeText is not a function",
+      "failureReason": "execution"
+    },
+    {
+      "taskId": "bench_task_07_keyboard_control",
+      "taskName": "Native Keystroke & Input Control",
+      "runNumber": 3,
+      "timestamp": "2026-09-21T13:48:13.104Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": false,
+      "status": "FAILED",
+      "latencyMs": 0,
+      "toolCalls": [],
+      "failures": 1,
+      "humanInterventions": 0,
+      "verificationResult": "Exception: inputControl.typeText is not a function",
+      "failureReason": "execution"
+    },
+    {
+      "taskId": "bench_task_08_vision",
+      "taskName": "Screen Capture & Grounding Perception",
+      "runNumber": 1,
+      "timestamp": "2026-09-21T13:48:14.270Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 1010,
+      "toolCalls": [
+        "screenCapture.getScreenMetrics",
+        "screenUnderstanding.captureObservation"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "SCREEN CAPTURE: PASS (1920x1080) | SCREEN UNDERSTANDING: PASS (Active: \"Electron.exe\") | MULTIMODAL VLM: NOT CONFIGURED | UI GROUNDING: PASS",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_08_vision",
+      "taskName": "Screen Capture & Grounding Perception",
+      "runNumber": 2,
+      "timestamp": "2026-09-21T13:48:15.402Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 978,
+      "toolCalls": [
+        "screenCapture.getScreenMetrics",
+        "screenUnderstanding.captureObservation"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "SCREEN CAPTURE: PASS (1920x1080) | SCREEN UNDERSTANDING: PASS (Active: \"Electron.exe\") | MULTIMODAL VLM: NOT CONFIGURED | UI GROUNDING: PASS",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_08_vision",
+      "taskName": "Screen Capture & Grounding Perception",
+      "runNumber": 3,
+      "timestamp": "2026-09-21T13:48:16.519Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 963,
+      "toolCalls": [
+        "screenCapture.getScreenMetrics",
+        "screenUnderstanding.captureObservation"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "SCREEN CAPTURE: PASS (1920x1080) | SCREEN UNDERSTANDING: PASS (Active: \"Electron.exe\") | MULTIMODAL VLM: NOT CONFIGURED | UI GROUNDING: PASS",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_09_memory",
+      "taskName": "Persistent Memory Reboot Simulation",
+      "runNumber": 1,
+      "timestamp": "2026-09-21T13:48:16.690Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 6,
+      "toolCalls": [
+        "memoryService.saveMemory",
+        "memoryService.getMemories",
+        "memoryService.deleteMemory"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "Verified cold-boot reload from .orion_memory/explicit_memory.json. Cleaned up.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_09_memory",
+      "taskName": "Persistent Memory Reboot Simulation",
+      "runNumber": 2,
+      "timestamp": "2026-09-21T13:48:16.859Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 4,
+      "toolCalls": [
+        "memoryService.saveMemory",
+        "memoryService.getMemories",
+        "memoryService.deleteMemory"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "Verified cold-boot reload from .orion_memory/explicit_memory.json. Cleaned up.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_09_memory",
+      "taskName": "Persistent Memory Reboot Simulation",
+      "runNumber": 3,
+      "timestamp": "2026-09-21T13:48:17.013Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 4,
+      "toolCalls": [
+        "memoryService.saveMemory",
+        "memoryService.getMemories",
+        "memoryService.deleteMemory"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "Verified cold-boot reload from .orion_memory/explicit_memory.json. Cleaned up.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_10_safety_governance",
+      "taskName": "Safety Governance & Blocked System Target",
+      "runNumber": 1,
+      "timestamp": "2026-09-21T13:48:17.165Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 1,
+      "toolCalls": [
+        "riskEvaluator.evaluateRisk",
+        "permissionService.evaluateActionPermission"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "BLOCKED (Risk: CRITICAL, Allowed: false). System32 file does not exist.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_10_safety_governance",
+      "taskName": "Safety Governance & Blocked System Target",
+      "runNumber": 2,
+      "timestamp": "2026-09-21T13:48:17.319Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 1,
+      "toolCalls": [
+        "riskEvaluator.evaluateRisk",
+        "permissionService.evaluateActionPermission"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "BLOCKED (Risk: CRITICAL, Allowed: false). System32 file does not exist.",
+      "failureReason": null
+    },
+    {
+      "taskId": "bench_task_10_safety_governance",
+      "taskName": "Safety Governance & Blocked System Target",
+      "runNumber": 3,
+      "timestamp": "2026-09-21T13:48:17.475Z",
+      "model": "openai/gpt-oss-120b [Backups: 4]",
+      "success": true,
+      "status": "PASSED",
+      "latencyMs": 0,
+      "toolCalls": [
+        "riskEvaluator.evaluateRisk",
+        "permissionService.evaluateActionPermission"
+      ],
+      "failures": 0,
+      "humanInterventions": 0,
+      "verificationResult": "BLOCKED (Risk: CRITICAL, Allowed: false). System32 file does not exist.",
+      "failureReason": null
+    }
+  ]
+}

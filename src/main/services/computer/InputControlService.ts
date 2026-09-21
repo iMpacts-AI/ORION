@@ -1,8 +1,24 @@
 import { ScreenPoint } from '../../../shared/types/action';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+export function resolveNativeInputExe(): string | null {
+  const candidates = [
+    path.join(__dirname, '..', '..', 'platform', 'win32-native-input.exe'),
+    path.join(__dirname, '..', 'platform', 'win32-native-input.exe'),
+    path.resolve(process.cwd(), 'src/main/platform/win32-native-input.exe'),
+    path.resolve(process.cwd(), 'dist-electron/main/platform/win32-native-input.exe')
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
 
 export interface IInputDriver {
   mouseMove(x: number, y: number): Promise<void>;
@@ -20,8 +36,27 @@ export interface IInputDriver {
 }
 
 export class WindowsNativeInputDriver implements IInputDriver {
+  private nativeExePath: string | null = null;
+
+  constructor() {
+    if (process.platform === 'win32') {
+      this.nativeExePath = resolveNativeInputExe();
+    }
+  }
+
+  public getNativeExePath(): string | null {
+    return this.nativeExePath;
+  }
+
   public async mouseMove(x: number, y: number): Promise<void> {
     if (process.platform === 'win32') {
+      const exe = this.nativeExePath || resolveNativeInputExe();
+      if (exe) {
+        try {
+          await execFileAsync(exe, ['setpos', String(Math.round(x)), String(Math.round(y))], { timeout: 2000 });
+          return;
+        } catch (err) {}
+      }
       try {
         const psCommand = `powershell -NoProfile -Command "[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${Math.round(x)}, ${Math.round(y)})"`;
         await execAsync(psCommand, { timeout: 2000 });
@@ -31,6 +66,13 @@ export class WindowsNativeInputDriver implements IInputDriver {
 
   public async mouseClick(button: 'left' | 'right' | 'middle' = 'left'): Promise<void> {
     if (process.platform === 'win32') {
+      const exe = this.nativeExePath || resolveNativeInputExe();
+      if (exe) {
+        try {
+          await execFileAsync(exe, ['click', button], { timeout: 2000 });
+          return;
+        } catch (err) {}
+      }
       try {
         let flagDown = 0x0002; // MOUSEEVENTF_LEFTDOWN
         let flagUp = 0x0004;   // MOUSEEVENTF_LEFTUP
@@ -48,6 +90,15 @@ export class WindowsNativeInputDriver implements IInputDriver {
   }
 
   public async mouseDoubleClick(): Promise<void> {
+    if (process.platform === 'win32') {
+      const exe = this.nativeExePath || resolveNativeInputExe();
+      if (exe) {
+        try {
+          await execFileAsync(exe, ['doubleclick'], { timeout: 2000 });
+          return;
+        } catch (err) {}
+      }
+    }
     await this.mouseClick('left');
     await new Promise(r => setTimeout(r, 100));
     await this.mouseClick('left');
@@ -75,6 +126,13 @@ export class WindowsNativeInputDriver implements IInputDriver {
 
   public async scroll(amount: number): Promise<void> {
     if (process.platform === 'win32') {
+      const exe = this.nativeExePath || resolveNativeInputExe();
+      if (exe) {
+        try {
+          await execFileAsync(exe, ['scroll', String(amount)], { timeout: 2000 });
+          return;
+        } catch (err) {}
+      }
       try {
         const clicks = Math.round(amount * 120);
         const psCommand = `powershell -NoProfile -Command "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Mouse { [DllImport(\\"user32.dll\\")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo); }'; [Mouse]::mouse_event(0x0800, 0, 0, [uint32]${clicks}, 0)"`;
@@ -242,5 +300,74 @@ export class InputControlService {
 
   public async hotkey(keys: string[]): Promise<void> {
     await this.driver.hotkey(keys);
+  }
+
+  public async getEnvironmentStatus(): Promise<{
+    isInteractive: boolean;
+    desktopName: string;
+    isAttached: boolean;
+    isVerificationAvailable: boolean;
+  }> {
+    if (process.platform !== 'win32') {
+      return { isInteractive: true, desktopName: 'default', isAttached: true, isVerificationAvailable: true };
+    }
+    const exe = resolveNativeInputExe();
+    if (exe) {
+      try {
+        const { stdout } = await execFileAsync(exe, ['status'], { timeout: 2000 });
+        const isInteractive = stdout.includes('STATUS:INTERACTIVE');
+        const deskMatch = stdout.match(/DESKTOP:([^|]+)/);
+        const desktopName = deskMatch ? deskMatch[1] : 'unknown';
+        const isAttached = stdout.includes('ATTACHED:True');
+        return {
+          isInteractive,
+          desktopName,
+          isAttached,
+          isVerificationAvailable: isInteractive && isAttached
+        };
+      } catch (err) {}
+    }
+    return { isInteractive: false, desktopName: 'unknown', isAttached: false, isVerificationAvailable: false };
+  }
+
+  public async verifyCursorPosition(expectedX: number, expectedY: number, tolerance = 25): Promise<{
+    verified: boolean;
+    status: 'INPUT_VERIFIED' | 'INPUT_EXECUTED' | 'INPUT_VERIFICATION_UNAVAILABLE' | 'INPUT_FAILED';
+    currentPos?: ScreenPoint;
+    delta?: { dx: number; dy: number };
+    reason?: string;
+  }> {
+    const env = await this.getEnvironmentStatus();
+    const exe = resolveNativeInputExe();
+    if (!exe || !env.isInteractive || !env.isVerificationAvailable) {
+      return {
+        verified: false,
+        status: 'INPUT_VERIFICATION_UNAVAILABLE',
+        reason: `Desktop is non-interactive or unattached (${env.desktopName}). Verification unavailable.`
+      };
+    }
+    try {
+      const { stdout } = await execFileAsync(exe, ['getpos'], { timeout: 2000 });
+      const m = stdout.match(/POS:(-?\d+),(-?\d+)/);
+      if (m) {
+        const currentPos = { x: parseInt(m[1], 10), y: parseInt(m[2], 10) };
+        const dx = Math.abs(currentPos.x - expectedX);
+        const dy = Math.abs(currentPos.y - expectedY);
+        if (dx <= tolerance && dy <= tolerance) {
+          return { verified: true, status: 'INPUT_VERIFIED', currentPos, delta: { dx, dy } };
+        } else {
+          return {
+            verified: false,
+            status: 'INPUT_FAILED',
+            currentPos,
+            delta: { dx, dy },
+            reason: `Offset (dx=${dx}, dy=${dy}) exceeded tolerance ${tolerance}.`
+          };
+        }
+      }
+      return { verified: false, status: 'INPUT_VERIFICATION_UNAVAILABLE', reason: stdout.trim() };
+    } catch (err: any) {
+      return { verified: false, status: 'INPUT_FAILED', reason: err.message };
+    }
   }
 }
