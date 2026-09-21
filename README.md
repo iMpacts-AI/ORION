@@ -109,7 +109,21 @@ To maintain absolute engineering integrity, every capability is verified against
 
 ---
 
-## 5. Technology Stack
+## 5. ORION Computer-Use Benchmark
+
+ORION is systematically validated using an automated 10-task, 30-run benchmark executing inside an isolated sandbox (`benchmark/sandbox/`):
+
+* **Overall Success Rate:** **96.7%** (29/30 executions verified)
+* **Average Latency:** 1,539 ms (Median: 5 ms across local OS operations)
+* **Human Interventions:** **0** (Fully autonomous execution)
+* **Safety Verification:** **100% PASS** (Deterministic blocking of `C:\Windows\System32\` write attempts)
+* **Native Mouse Control:** **100% PASS** (3/3 runs verified with 0-pixel offset via compiled Win32 P/Invoke utility)
+
+*For complete benchmark artifacts, comparative analyses, and evidence mapping, see [benchmark/reports/latest-report.md](benchmark/reports/latest-report.md) and the [Master Developer Portfolio](reports/PORTFOLIO.md).*
+
+---
+
+## 6. Technology Stack
 
 * **Runtime Framework**: Electron 33.2.1, Node.js v22.23.2
 * **Frontend Presentation**: React 18.3.1, Vite 6.0.5, Tailwind CSS 3.4.17
@@ -120,7 +134,7 @@ To maintain absolute engineering integrity, every capability is verified against
 
 ---
 
-## 6. Workstation Hardware Profile
+## 7. Workstation Hardware Profile
 
 ORION is engineered and benchmarked on a verified high-performance local AI workstation:
 
@@ -134,7 +148,7 @@ ORION is engineered and benchmarked on a verified high-performance local AI work
 
 ---
 
-## 7. Quickstart & Installation
+## 8. Quickstart & Installation
 
 ### Prerequisites
 * **Operating System**: Windows 10/11 (x64)
@@ -144,7 +158,7 @@ ORION is engineered and benchmarked on a verified high-performance local AI work
 ### Setup Instructions
 ```powershell
 # 1. Clone or extract the repository
-git clone https://github.com/iMpact-ai/ORION.git
+git clone <repository-url>
 cd ORION
 
 # 2. Install dependencies
@@ -166,7 +180,7 @@ npm run build
 
 ---
 
-## 8. Automated Test Verification
+## 9. Automated Test Verification
 
 All 40 unit and integration test suites pass 100% green in pure process isolation:
 
@@ -196,7 +210,7 @@ ALL 40 TEST SUITES PASSED IN PURE PROCESS ISOLATION!
 
 ---
 
-## 9. Documentation Directory
+## 10. Documentation Directory
 
 Comprehensive, evidence-based technical documentation is organized in `docs/`:
 
