@@ -1,0 +1,78 @@
+{
+  "runId": "titan_run_1787305041085_wsdn1",
+  "target": "Video_001",
+  "state": "ERROR",
+  "gatePassed": false,
+  "failureReasons": [
+    "Stage 4 Failed: Render execution error: Titan Video Compiler execution timed out after 600032ms"
+  ],
+  "recommendedCorrectiveActions": [
+    "Check master_documentary_compiler.py logs and ffmpeg setup"
+  ],
+  "renderAttempts": 1,
+  "maxRenderAttempts": 1,
+  "artifacts": {
+    "stateTelemetry": {
+      "titanRootDir": "C:\\Users\\smsaq\\Project_Titan",
+      "currentStateExists": true,
+      "sessionCheckpointExists": true,
+      "masterMemoryExists": true,
+      "unfinishedTasks": [
+        "**Where Work Stopped**: Session memory setup & physical playback verification of rendered MP4 files.",
+        "**Active Blocker**: `MEDIA PIPELINE FAILURE INVESTIGATION` (Confirming FFmpeg video/audio stream playback).",
+        "**"
+      ],
+      "rawHeadCurrentState": "# PROJECT TITAN — CURRENT STATE SNAPSHOT\r\n**Generated At**: 2026-08-10 20:12:23 | **Source**: `session_loader.py` v1.0.1\r\n\r\n---\r\n\r\n## 1. Project Overview & Location\r\n- **Root Directory**: `C:\\Users\\smsaq\\Project_Titan`\r\n- **Current Stage**: Stage 1 — Validation\r\n- **Primary Target**: 10,000 YouTube Subscribers | 1,000 Email Subscribers\r\n\r\n---\r\n\r\n## 2. Recent Memory Summaries\r\n\r\n### Master Memory Head\r\n- # PROJECT TITAN — MASTER MEMORY SYSTEM\r\n- ## 1. Resume State & Reboot Checkpoint (2026-08-06)\r\n- ```mermaid\r\n- flowchart TD\r\n- Shutdown[Pre-Reboot Shutdown] --> SaveState[Save SESSION_CHECKPOINT.md & CURRENT_STATE.md]\r\n\r\n### CEO Dashboard Head\r\n- # PROJECT TITAN — EXECUTIVE CEO DASHBOARD\r\n- **Location**: `13_Reports/CEO_Dashboard.md` | **Status**: Active | **Stage**: Stage 1 (Validation)\r\n-",
+      "stage": "*: Stage 1 — Validation",
+      "target": "*: 10,000 YouTube Subscribers | 1,000 Email Subscribers",
+      "activeBlocker": "*:",
+      "whereWorkStopped": "& Unfinished Tasks",
+      "checkpointStatus": "*: Creative Polish V1 Complete (Classification A Achieved)"
+    },
+    "visualPlanPath": "C:\\Users\\smsaq\\Project_Titan\\07_Video_Projects\\visual_director_plan.json",
+    "audioPath": "C:\\Users\\smsaq\\Project_Titan\\06_Audio\\Video_001_NVDA_CUDA_VO_Master.mp3"
+  },
+  "auditTrail": [
+    {
+      "stage": "INSPECTING",
+      "timestamp": 1787305041089,
+      "durationMs": 4,
+      "success": true,
+      "message": "Titan state inspection verified successfully",
+      "severity": "SUCCESS"
+    },
+    {
+      "stage": "PLANNING",
+      "timestamp": 1787305041186,
+      "durationMs": 97,
+      "success": true,
+      "message": "Visual Director Plan generated & verified",
+      "severity": "SUCCESS",
+      "artifactPath": "C:\\Users\\smsaq\\Project_Titan\\07_Video_Projects\\visual_director_plan.json",
+      "data": {
+        "title": "The Engineering Secret Behind Nvidia's $3 Trillion Moat",
+        "totalCuts": 136,
+        "cutFrequency": "Every 3.5 seconds",
+        "scenesCount": 136
+      }
+    },
+    {
+      "stage": "VOICE_READY",
+      "timestamp": 1787305041186,
+      "durationMs": 0,
+      "success": true,
+      "message": "Master Voiceover audio track verified",
+      "severity": "SUCCESS",
+      "artifactPath": "C:\\Users\\smsaq\\Project_Titan\\06_Audio\\Video_001_NVDA_CUDA_VO_Master.mp3"
+    },
+    {
+      "stage": "ERROR",
+      "timestamp": 1787305641219,
+      "durationMs": 600033,
+      "success": false,
+      "message": "Stage 4 Failed: Render execution error: Titan Video Compiler execution timed out after 600032ms",
+      "severity": "ERROR"
+    }
+  ],
+  "error": "Stage 4 Failed: Render execution error: Titan Video Compiler execution timed out after 600032ms"
+}

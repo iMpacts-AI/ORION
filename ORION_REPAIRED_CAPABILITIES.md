@@ -1,0 +1,13 @@
+# ORION REPAIRED CAPABILITIES MATRIX — PRODUCTION V1
+
+| Subsystem | Previous State (Audit) | Repaired State (V1 Production) | Execution Reality | Test & Runtime Verification |
+| :--- | :--- | :--- | :--- | :--- |
+| **Persistent Memory** | Volatile in-memory Maps; 100% loss on reboot | JSON file-backed disk storage (`.orion_memory/*.json`) | **REAL**: Persists across restarts; reloads state automatically on boot. | `Phase13UnifiedMemory.test.ts` (Persistence across restart test PASS) |
+| **Browser Capability** | Hardcoded `about:blank` stub | Live HTTP DOM parsing, link discovery, navigation & click | **REAL**: Real network requests, text extraction, URL boundary security. | `Phase10BrowserCapability.test.ts` (PASS) |
+| **Developer Agent** | Shallow folder search; unwired from IPC | Recursive workspace tree search, multi-language detection, build runner | **REAL**: Wired into IPC bridge (`developer:*`) with build command allowlisting. | `Phase12DeveloperAgent.test.ts` (PASS) |
+| **Computer Action Planning** | Regex-only heuristic | LLM structured JSON action plan generation with offline rule fallback | **REAL**: Queries active LLM model when configured; falls back safely offline. | `ComputerActionPlanner.test.ts`, `Phase10AdaptiveComputerUse.test.ts` (PASS) |
+| **Computer Action Execution** | Parallel broken `ComputerActionService` with dummy stubs | Unified routing directly to `ComputerUseService` & native drivers | **REAL**: Physical input dispatch and state verification without fake stubs. | `ComputerUseService.test.ts`, `Phase8ActionSafety.test.ts` (PASS) |
+| **Speech Synthesis (TTS)** | Timer-only dummy stub producing zero sound | Real Windows `System.Speech.Synthesis.SpeechSynthesizer` | **REAL**: Dispatches audio to Windows default playback device with abort handler. | `VoiceService.ts` runtime integration (PASS) |
+| **Offline AI Transparency** | Faked streaming by splitting string on spaces | Explicitly labeled `offline-rule-router` | **HONEST**: Transparent rule-based fallback without false neural claims. | `AIProvider.ts`, `StreamingIntegration.test.ts` (PASS) |
+| **Camera & Vision** | Camera returned empty synthetic objects | Honest configuration status (`VISION NOT CONFIGURED` when no stream) | **HONEST**: Screen vision operates over real base64 frames; camera reports status honestly. | `VisionIntegration.test.ts` (PASS) |
+| **Project Titan Pipeline** | Hardened deterministic pipeline | Hardened deterministic pipeline with RAM gating and SHA-256 validation | **REAL**: 4K Master MP4 locks, subprocess isolation, strict timeout enforcement. | `TitanIntegrationPhase1/2A/2B/7B.test.ts` (PASS) |

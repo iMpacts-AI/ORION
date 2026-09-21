@@ -1,0 +1,154 @@
+[
+  {
+    "file": "ComputerActionPlanner.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "ComputerActionVerifier.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "ComputerHUDIntegration.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "ComputerIPCIntegration.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "ComputerPermissionService.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "ComputerRecoveryService.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "ComputerUseService.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "EndToEndIntegration.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "InputControlService.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase10AdaptiveComputerUse.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase10BrowserCapability.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase11ExecutionTrace.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase11RealWorldBenchmark.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase12DeveloperAgent.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase12ProductionHardening.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase13ProductionGradeBenchmark.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase13UnifiedMemory.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase14Reliability.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase5AgentCore.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase5_5Integration.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase6Kernel.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase7Environment.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase8ActionSafety.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase9TaskSupervisor.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "Phase9WorkflowExecution.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "PhaseCReasoning.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "ScreenUnderstandingService.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "SSEParser.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "StreamingIntegration.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "TitanBatchOrchestrator.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "TitanClosedLoopPipeline.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "TitanHUDIntegration.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "TitanIntegrationPhase1.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "TitanIntegrationPhase2A.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "TitanIntegrationPhase2B.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "TitanOperatorExperience.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "TitanPackagingPhase7B.test.ts",
+    "status": "PASS"
+  },
+  {
+    "file": "VisionIntegration.test.ts",
+    "status": "PASS"
+  }
+]

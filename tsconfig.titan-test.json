@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "outDir": "./dist-test"
+  },
+  "include": [
+    "src/main/**/*.ts",
+    "src/shared/**/*.ts"
+  ],
+  "exclude": [
+    "src/main/services/__tests__/StreamingIntegration.test.ts",
+    "src/main/services/__tests__/SSEParser.test.ts",
+    "src/main/services/__tests__/EndToEndIntegration.test.ts",
+    "src/main/services/__tests__/Phase10BrowserCapability.test.ts",
+    "src/main/services/__tests__/Phase11ExecutionTrace.test.ts",
+    "src/main/services/__tests__/Phase12DeveloperAgent.test.ts",
+    "src/main/services/__tests__/Phase13UnifiedMemory.test.ts",
+    "src/main/services/__tests__/Phase14Reliability.test.ts",
+    "src/main/services/__tests__/Phase5AgentCore.test.ts",
+    "src/main/services/__tests__/Phase5_5Integration.test.ts",
+    "src/main/services/__tests__/Phase6Kernel.test.ts",
+    "src/main/services/__tests__/Phase7Environment.test.ts",
+    "src/main/services/__tests__/Phase8ActionSafety.test.ts",
+    "src/main/services/__tests__/Phase9TaskSupervisor.test.ts",
+    "src/main/services/__tests__/PhaseCReasoning.test.ts",
+    "src/main/services/__tests__/VisionIntegration.test.ts"
+  ]
+}
