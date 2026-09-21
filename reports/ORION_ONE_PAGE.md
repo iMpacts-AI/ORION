@@ -54,7 +54,7 @@ An automated 10-task benchmark was executed across 3 consecutive iterations (**3
 ---
 
 ## 6. Verification Artifacts & Contact
-* **GitHub Repository:** Not currently configured. (Local Git repo on `main` at commit `f312538`).
+* **GitHub Repository:** [https://github.com/iMpacts-AI/ORION](https://github.com/iMpacts-AI/ORION)
 * **Raw Benchmark Trace:** [`benchmark/results/benchmark_results_2026-09-21T15-11-52-274Z.json`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/benchmark/results/benchmark_results_2026-09-21T15-11-52-274Z.json)
 * **Benchmark Report:** [`benchmark/reports/latest-report.md`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/benchmark/reports/latest-report.md)
 * **Comparison Analysis:** [`benchmark/reports/post-fix-comparison.md`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/benchmark/reports/post-fix-comparison.md)

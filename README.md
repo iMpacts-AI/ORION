@@ -158,7 +158,7 @@ ORION is engineered and benchmarked on a verified high-performance local AI work
 ### Setup Instructions
 ```powershell
 # 1. Clone or extract the repository
-git clone <repository-url>
+git clone https://github.com/iMpacts-AI/ORION.git
 cd ORION
 
 # 2. Install dependencies

@@ -170,7 +170,7 @@ Reviewers appreciate knowing the physical environment where engineering happens:
 - **Inquiry Channels:**
   - **Email:** `contact@impacts-ai.com`
   - **Company Domain:** `https://impacts-ai.com`
-  - **GitHub Status:** Local repository verified; remote synchronization pending.
+  - **GitHub Repository:** [https://github.com/iMpacts-AI/ORION](https://github.com/iMpacts-AI/ORION) (Active & Public)
   - **Location:** United Arab Emirates (GST / UTC+4).
 - **Direct Download Pack:**
   - `[Download Master Portfolio (PDF/MD)]`

@@ -275,7 +275,10 @@ Built strictly from verified Git commit history and release documentation:
 
 # GitHub
 
-* **GitHub Repository:** Not currently configured. (Local sovereign Git repository on branch `main` at commit `f312538`).
+* **GitHub Repository:** [https://github.com/iMpacts-AI/ORION](https://github.com/iMpacts-AI/ORION)
+* **Organization / Owner:** `iMpacts-AI` (`iMpact`)
+* **Visibility:** Public
+* **Default Branch:** `main`
 
 ---
 
