@@ -1,15 +1,15 @@
-# ORION: Autonomous Desktop AI Agent — 2-Minute Reviewer Brief
+# ORION: Autonomous Desktop AI Agent â€” 2-Minute Reviewer Brief
 
 **Builder:** Saqib (Independent Builder, Age 13, United Arab Emirates)  
 **Initiative:** iMpact ([https://impacts-ai.com](https://impacts-ai.com))  
 **Project:** ORION (Permission-Based Desktop AI Computer-Use Agent)  
 **Git Baseline:** Commit `f312538` (Branch: `main`)  
-**Hardware:** Dell Precision Mobile Workstation (Intel i7-12850HX · 128 GB DDR5 · NVIDIA RTX A5500 16 GB VRAM)  
+**Hardware:** Dell Precision Mobile Workstation (Intel i7-12850HX Â· 128 GB DDR5 Â· NVIDIA RTX A5500 16 GB VRAM)  
 
 ---
 
 ## 1. What is ORION?
-ORION is an open-architecture, permission-based desktop AI computer-use agent. It enables AI language models to interact with the operating system—reading telemetry, executing filesystem tasks, capturing screen context, moving the cursor, and injecting keystrokes—under deterministic code-level safety boundaries.
+ORION is an open-architecture, permission-based desktop AI computer-use agent. It enables AI language models to interact with the operating systemâ€”reading telemetry, executing filesystem tasks, capturing screen context, moving the cursor, and injecting keystrokesâ€”under deterministic code-level safety boundaries.
 
 ---
 
@@ -55,8 +55,8 @@ An automated 10-task benchmark was executed across 3 consecutive iterations (**3
 
 ## 6. Verification Artifacts & Contact
 * **GitHub Repository:** [https://github.com/iMpacts-AI/ORION](https://github.com/iMpacts-AI/ORION)
-* **Raw Benchmark Trace:** [`benchmark/results/benchmark_results_2026-09-21T15-11-52-274Z.json`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/benchmark/results/benchmark_results_2026-09-21T15-11-52-274Z.json)
-* **Benchmark Report:** [`benchmark/reports/latest-report.md`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/benchmark/reports/latest-report.md)
-* **Comparison Analysis:** [`benchmark/reports/post-fix-comparison.md`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/benchmark/reports/post-fix-comparison.md)
-* **Demonstration Video:** `[Pending Recording — Script in docs/demo-plan.md]`
+* **Raw Benchmark Trace:** [`benchmark/results/benchmark_results_2026-09-21T15-11-52-274Z.json`](../benchmark/results/benchmark_results_2026-09-21T15-11-52-274Z.json)
+* **Benchmark Report:** [`benchmark/reports/latest-report.md`](../benchmark/reports/latest-report.md)
+* **Comparison Analysis:** [`benchmark/reports/post-fix-comparison.md`](../benchmark/reports/post-fix-comparison.md)
+* **Demonstration Video:** `[Pending Recording â€” Script in docs/demo-plan.md]`
 * **Contact:** `contact@impacts-ai.com` | [https://impacts-ai.com/contact](https://impacts-ai.com/contact)

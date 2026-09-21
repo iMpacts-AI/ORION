@@ -1,7 +1,7 @@
-# ORION & Saqib — Personal Developer Portfolio Website Plan
+# ORION & Saqib â€” Personal Developer Portfolio Website Plan
 **Document Version:** 1.0.0  
 **Target Date:** Q4 2026 / Q1 2027  
-**Builder:** Saqib (13, UAE) — Founder, iMpact  
+**Builder:** Saqib (13, UAE) â€” Founder, iMpact  
 **Focus:** Autonomous Computer-Use Agent Architecture, Systems Engineering & Empirical AI Benchmarks  
 **Classification:** Strategic Engineering Document
 
@@ -13,7 +13,7 @@
 An audit of existing project repositories and documentation confirms:
 1. **Organizational Website:** [`https://impacts-ai.com`](https://impacts-ai.com) exists as the production corporate web application for **iMpact** (built with TanStack Router, React, and Tailwind CSS). It serves as the enterprise portal and product landing page for iMpact initiatives.
 2. **Personal Portfolio Website:** **No dedicated personal portfolio website currently exists for Saqib.**
-   - All external recognition, documentation, and project logs currently reside within the ORION desktop application repository (`C:\Users\PRECISION-ULTRA-RTX\Downloads\ORION`) or the iMpact company portal.
+   - All external recognition, documentation, and project logs currently reside within the ORION desktop application repository (`ORION`) or the iMpact company portal.
    - There is no standalone web showcase presenting Saqib's personal trajectory as a 13-year-old systems programmer, AI architect, and hardware-accelerated agent engineer.
 
 ### 1.2 Purpose of the Personal Portfolio Website
@@ -65,16 +65,16 @@ flowchart TD
 ---
 
 ### Section 1: Hero Section (Above the Fold)
-- **Badge:** `LIVE BENCHMARK: 96.7% PASS RATE (29/30 RUNS) · ZERO HUMAN INTERVENTIONS`
+- **Badge:** `LIVE BENCHMARK: 96.7% PASS RATE (29/30 RUNS) Â· ZERO HUMAN INTERVENTIONS`
 - **Headline:** **Saqib**
 - **Subheadline:** **13-Year-Old Systems & AI Engineer | Founder, iMpact (UAE)**
 - **Elevator Proposition:**
   > Building deterministic, local-first autonomous computer-use agents and high-performance AI infrastructure on Windows. Designer of ORION.
 - **Quick-Stat Grid (4 Metric Cards):**
-  1. **96.7%** — Benchmark Success Rate (Post-Fix, 29/30 runs).
-  2. **0** — Interventions Required Across 60 Automated Trials.
-  3. **40/40** — Passing Vitest Test Suites (100% Core Coverage).
-  4. **128 GB RAM + RTX A5500** — Bare-Metal Local Agent Workstation.
+  1. **96.7%** â€” Benchmark Success Rate (Post-Fix, 29/30 runs).
+  2. **0** â€” Interventions Required Across 60 Automated Trials.
+  3. **40/40** â€” Passing Vitest Test Suites (100% Core Coverage).
+  4. **128 GB RAM + RTX A5500** â€” Bare-Metal Local Agent Workstation.
 - **Action Buttons:**
   - `[Explore ORION Benchmark]` (smooth scroll to Section 2).
   - `[View One-Page Reviewer Brief]` (opens `/brief` or downloads PDF).
@@ -84,7 +84,7 @@ flowchart TD
 
 ### Section 2: ORION Master Case Study (Autonomous Desktop Execution)
 - **Problem Statement:** Existing computer-use agents (Anthropic Computer Use, general LLM scripts) suffer from high latency, brittle coordinate hallucination, and destructive unbounded actions on native operating systems.
-- **Solution:** ORION — An Electron + TypeScript + Vite autonomous desktop agent with native Win32 C++ input bindings, dual-mode execution (Electron IPC + PowerShell fallbacks), and a deterministic safety containment gate.
+- **Solution:** ORION â€” An Electron + TypeScript + Vite autonomous desktop agent with native Win32 C++ input bindings, dual-mode execution (Electron IPC + PowerShell fallbacks), and a deterministic safety containment gate.
 - **System Architecture Visual:**
   - Interactive diagram illustrating: `Electron Main (IPC / Win32 Native)` $\leftrightarrow$ `Preload Sandbox` $\leftrightarrow$ `React 19 Dashboard` $\leftrightarrow$ `Deterministic Safety Gate` $\leftrightarrow$ `OS Host (User32 / Shell / FileSystem)`.
 - **Architectural Highlights (Accordion / Tabs):**
@@ -97,7 +97,7 @@ flowchart TD
 ### Section 3: Interactive Benchmark Explorer (The Empirical Proof Core)
 This is the centerpiece of the portfolio site.
 - **Run Selector Switch:**
-  - `[Baseline v1.0.0 (139ecdb) — 90.0%]` vs `[Post-Fix v1.0.1 (f312538) — 96.7%]`
+  - `[Baseline v1.0.0 (139ecdb) â€” 90.0%]` vs `[Post-Fix v1.0.1 (f312538) â€” 96.7%]`
 - **Task Scorecard Matrix (10 Benchmark Tasks):**
   | Task ID | Task Description | Runs | Baseline | Post-Fix | Avg Latency | Verified Behavior |
   |:---|:---|:---:|:---:|:---:|:---:|:---|
@@ -131,7 +131,7 @@ This is the centerpiece of the portfolio site.
 
 ### Section 5: The Bare-Metal Engineering Workstation
 Reviewers appreciate knowing the physical environment where engineering happens:
-- **Machine:** Dell Precision Mobile Workstation (`PRECISION-ULTRA-RTX`)
+- **Machine:** Dell Precision Mobile Workstation (Windows 11 Pro 64-bit)
 - **Processor:** 12th Gen Intel Core i7-12850HX (16 Cores, 24 Threads, up to 4.8 GHz)
 - **Memory:** 128 GB DDR5 RAM (high-capacity multi-agent simulation & local model hosting)
 - **Graphics / Compute:** NVIDIA RTX A5500 Laptop GPU (16 GB GDDR6 ECC VRAM, Driver 596.71)
@@ -246,16 +246,16 @@ flowchart LR
     P3 --> P4["Phase 4: Review, Polish & Deploy (Week 4)"]
 ```
 
-1. **Phase 1: Project Scaffolding & Content Migration (Days 1–3)**
+1. **Phase 1: Project Scaffolding & Content Migration (Days 1â€“3)**
    - Initialize Next.js/Vite repository with Tailwind CSS and dark mode theme.
    - Ingest markdown content directly from `PORTFOLIO.md` and `EVIDENCE_INDEX.md`.
-2. **Phase 2: Interactive Benchmark Explorer (Days 4–7)**
+2. **Phase 2: Interactive Benchmark Explorer (Days 4â€“7)**
    - Build the interactive benchmark scorecard and JSON reader.
    - Load static datasets from `benchmark/results/` directly into the web client.
-3. **Phase 3: Asset Capture & Media Production (Days 8–10)**
+3. **Phase 3: Asset Capture & Media Production (Days 8â€“10)**
    - Capture the 8 verified screenshots and execution recordings from the workstation.
    - Integrate vector architecture diagrams.
-4. **Phase 4: Review, Lighthouse Optimization & Deployment (Days 11–14)**
+4. **Phase 4: Review, Lighthouse Optimization & Deployment (Days 11â€“14)**
    - Perform Lighthouse audit (aim for 100 Performance, 100 Accessibility, 100 Best Practices, 100 SEO).
    - Configure DNS on Cloudflare / Vercel.
    - Publish live portfolio link across recognition platforms and fellowship applications.

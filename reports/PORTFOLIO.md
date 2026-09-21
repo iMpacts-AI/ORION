@@ -1,10 +1,10 @@
-# Saqib — Independent Builder
+# Saqib â€” Independent Builder
 
 **Builder:** Saqib  
 **Role:** Independent Systems & Software Builder  
 **Focus:** Native Desktop AI Systems, Computer-Use Agents, and OS Internals  
 **Initiative:** iMpact ([https://impacts-ai.com](https://impacts-ai.com))  
-**Workstation Lab:** Dell Precision Mobile Workstation (`PRECISION-ULTRA-RTX`)  
+**Workstation Lab:** Dell Precision Mobile Workstation (Windows 11 Pro 64-bit)  
 **Location:** United Arab Emirates  
 **Operating Principle:** *"Ideas are ideas. Implementation is the real deal."*  
 
@@ -171,22 +171,22 @@ Across 30 runs, exactly 1 failure occurred:
 
 | Capability / Claim | Status | Verification Evidence | Repository Location |
 | :--- | :---: | :--- | :--- |
-| **Electron Context Isolation** | **VERIFIED** | Strict preload script; renderer has no `require` or Node access | [`src/preload/preload.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/preload/preload.ts) |
-| **Multi-Provider AI Failover** | **VERIFIED** | Circuit breaker transitions; automated failover to healthy provider | [`src/main/services/OrionAIProviderRouter.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/services/OrionAIProviderRouter.ts) |
-| **Offline Heuristic Routing** | **VERIFIED** | Regex fast-path executes system commands with zero network calls | [`src/main/services/AIProvider.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/services/AIProvider.ts#L96) |
-| **Tool Dependency DAG** | **VERIFIED** | Parallel & sequential batch execution tested in Task 05 | [`src/main/services/ExecutionContext.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/services/ExecutionContext.ts) |
-| **Action Risk Scoring** | **VERIFIED** | Deterministic evaluation: `CRITICAL` for system roots | [`src/main/services/ActionRiskEvaluator.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/services/ActionRiskEvaluator.ts) |
-| **System32 Write Containment** | **VERIFIED** | 100% blocked rate across 3 benchmark runs (Task 10) | [`src/main/services/computer/ComputerPermissionService.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/services/computer/ComputerPermissionService.ts) |
-| **Process-Tree Estop** | **VERIFIED** | Process tree killed via `taskkill /PID /T /F`; verified in test suite | [`src/main/services/computer/ProcessSupervisor.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/services/computer/ProcessSupervisor.ts) |
-| **Native Win32 Mouse Control** | **VERIFIED** | Compiled C# utility attached to `OpenInputDesktop`; verified `dx=0, dy=0` | [`src/main/platform/win32-native-input.cs`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/platform/win32-native-input.cs) |
-| **Hardware Screen Capture** | **VERIFIED** | 1920×1080 display buffer captured in 90ms via Electron capturer | [`src/main/services/computer/ScreenCaptureService.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/services/computer/ScreenCaptureService.ts) |
-| **Cold-Boot Memory Persistence**| **VERIFIED** | Reloads explicit facts from disk across fresh service instances | [`src/main/services/memory/MemoryService.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/services/memory/MemoryService.ts) |
-| **Developer Repository Search** | **VERIFIED** | Traverses directory trees, detects languages, discovers symbols | [`src/main/platform/DeveloperAgentProvider.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/platform/DeveloperAgentProvider.ts) |
-| **Automated Regression Suite** | **VERIFIED** | 40/40 test suites pass in pure process isolation (`run_suites.cjs`) | [`run_suites.cjs`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/run_suites.cjs) |
-| **Production Build Integrity** | **VERIFIED** | 0 TypeScript errors; Vite bundles main (214kB) & renderer (709kB) | [`package.json`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/package.json) |
-| **Browser Interaction** | **PARTIAL** | Basic HTTP fetch & link parser implemented; interactive DOM pending | [`src/main/platform/BrowserProvider.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/platform/BrowserProvider.ts) |
-| **Voice Interface** | **PARTIAL** | Windows SAPI TTS implemented; real-time microphone STT pending | [`src/main/services/VoiceService.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/services/VoiceService.ts) |
-| **Local Offline VLM** | **PLANNED** | Daemon requires active GUI; reported unconfigured for offline use | [`src/main/services/VisionService.ts`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/src/main/services/VisionService.ts) |
+| **Electron Context Isolation** | **VERIFIED** | Strict preload script; renderer has no `require` or Node access | [`src/preload/preload.ts`](../src/preload/preload.ts) |
+| **Multi-Provider AI Failover** | **VERIFIED** | Circuit breaker transitions; automated failover to healthy provider | [`src/main/services/OrionAIProviderRouter.ts`](../src/main/services/OrionAIProviderRouter.ts) |
+| **Offline Heuristic Routing** | **VERIFIED** | Regex fast-path executes system commands with zero network calls | [`src/main/services/AIProvider.ts`](../src/main/services/AIProvider.ts#L96) |
+| **Tool Dependency DAG** | **VERIFIED** | Parallel & sequential batch execution tested in Task 05 | [`src/main/services/ExecutionContext.ts`](../src/main/services/ExecutionContext.ts) |
+| **Action Risk Scoring** | **VERIFIED** | Deterministic evaluation: `CRITICAL` for system roots | [`src/main/services/ActionRiskEvaluator.ts`](../src/main/services/ActionRiskEvaluator.ts) |
+| **System32 Write Containment** | **VERIFIED** | 100% blocked rate across 3 benchmark runs (Task 10) | [`src/main/services/computer/ComputerPermissionService.ts`](../src/main/services/computer/ComputerPermissionService.ts) |
+| **Process-Tree Estop** | **VERIFIED** | Process tree killed via `taskkill /PID /T /F`; verified in test suite | [`src/main/services/computer/ProcessSupervisor.ts`](../src/main/services/computer/ProcessSupervisor.ts) |
+| **Native Win32 Mouse Control** | **VERIFIED** | Compiled C# utility attached to `OpenInputDesktop`; verified `dx=0, dy=0` | [`src/main/platform/win32-native-input.cs`](../src/main/platform/win32-native-input.cs) |
+| **Hardware Screen Capture** | **VERIFIED** | 1920Ã—1080 display buffer captured in 90ms via Electron capturer | [`src/main/services/computer/ScreenCaptureService.ts`](../src/main/services/computer/ScreenCaptureService.ts) |
+| **Cold-Boot Memory Persistence**| **VERIFIED** | Reloads explicit facts from disk across fresh service instances | [`src/main/services/memory/MemoryService.ts`](../src/main/services/memory/MemoryService.ts) |
+| **Developer Repository Search** | **VERIFIED** | Traverses directory trees, detects languages, discovers symbols | [`src/main/platform/DeveloperAgentProvider.ts`](../src/main/platform/DeveloperAgentProvider.ts) |
+| **Automated Regression Suite** | **VERIFIED** | 40/40 test suites pass in pure process isolation (`run_suites.cjs`) | [`run_suites.cjs`](../run_suites.cjs) |
+| **Production Build Integrity** | **VERIFIED** | 0 TypeScript errors; Vite bundles main (214kB) & renderer (709kB) | [`package.json`](../package.json) |
+| **Browser Interaction** | **PARTIAL** | Basic HTTP fetch & link parser implemented; interactive DOM pending | [`src/main/platform/BrowserProvider.ts`](../src/main/platform/BrowserProvider.ts) |
+| **Voice Interface** | **PARTIAL** | Windows SAPI TTS implemented; real-time microphone STT pending | [`src/main/services/VoiceService.ts`](../src/main/services/VoiceService.ts) |
+| **Local Offline VLM** | **PLANNED** | Daemon requires active GUI; reported unconfigured for offline use | [`src/main/services/VisionService.ts`](../src/main/services/VisionService.ts) |
 
 ---
 
@@ -235,7 +235,7 @@ $$\text{Measure} \longrightarrow \text{Identify Failure} \longrightarrow \text{I
 
 ### Case Study: Resolving the Windows Desktop Isolation Defect
 * **Baseline Benchmark (Commit `139ecdb`):** Overall success rate was **90.0%** (27/30). All 3 runs of Task 06 (Mouse Control) failed. Observed cursor position was `(0, 0)` instead of `(100, 100)`.
-* **Root Cause Investigation:** Diagnosed in [`session0-input-investigation.md`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/benchmark/reports/session0-input-investigation.md). The test runner launched subshells on an isolated station thread desktop (`exebox-...`), where `GetCursorPos` returned Win32 Error 5 (`ERROR_ACCESS_DENIED`), silently defaulting coordinates to `(0, 0)`.
+* **Root Cause Investigation:** Diagnosed in [`session0-input-investigation.md`](../benchmark/reports/session0-input-investigation.md). The test runner launched subshells on an isolated station thread desktop (`exebox-...`), where `GetCursorPos` returned Win32 Error 5 (`ERROR_ACCESS_DENIED`), silently defaulting coordinates to `(0, 0)`.
 * **Engineering Fix:** Built `win32-native-input.cs`, compiled with `csc.exe`, invoking `OpenInputDesktop` and attaching an MTA worker thread via `SetThreadDesktop`.
 * **Re-Benchmark (Commit `f312538`):** Task 06 pass rate shifted to **100% (3/3)** with exact coordinate match (`dx=0, dy=0`). Task latency dropped from 1,432 ms to 440 ms (69.3% reduction). Overall benchmark score improved to **96.7% (29/30)**.
 * **Regression Check:** All 40 unit and integration test suites passed 100% green. Clean production build maintained.
@@ -246,7 +246,7 @@ $$\text{Measure} \longrightarrow \text{Identify Failure} \longrightarrow \text{I
 
 All benchmarks, automated tests, and engineering builds were executed on the primary local engineering workstation:
 
-* **Workstation Model:** Dell Precision Mobile Workstation (`PRECISION-ULTRA-RTX`)
+* **Workstation Model:** Dell Precision Mobile Workstation (Windows 11 Pro 64-bit)
 * **Operating System:** Microsoft Windows 11 Pro 64-bit (Build 26100)
 * **Processor (CPU):** 12th Gen Intel Core i7-12850HX (16 Cores, 24 Threads, up to 4.80 GHz)
 * **System Memory (RAM):** 128 GB High-Speed DDR5 RAM
@@ -260,15 +260,15 @@ All benchmarks, automated tests, and engineering builds were executed on the pri
 
 Built strictly from verified Git commit history and release documentation:
 
-* **August 2026 — Foundational Architecture (v0.1.0 – v0.5.0):**  
+* **August 2026 â€” Foundational Architecture (v0.1.0 â€“ v0.5.0):**  
   Established Electron + TypeScript core, IPC context isolation, and initial rule-based heuristic routing.
-* **Late August 2026 — Agent Capabilities & DAG Engine (v0.6.0 – v0.8.0):**  
+* **Late August 2026 â€” Agent Capabilities & DAG Engine (v0.6.0 â€“ v0.8.0):**  
   Implemented `ComputerUseService`, `ActionRiskEvaluator`, `ToolDependencyGraph`, and Project Titan video automation pipeline.
-* **Early September 2026 — Omnichannel Routing & Process Supervisor (v0.9.0):**  
+* **Early September 2026 â€” Omnichannel Routing & Process Supervisor (v0.9.0):**  
   Built 10-provider AI routing fabric, process-tree Estop (`taskkill`), and verified live OpenRouter loop with Llama 3.3 70B.
-* **Mid September 2026 — Forensic Hardening & Test Isolation (v1.0.0):**  
+* **Mid September 2026 â€” Forensic Hardening & Test Isolation (v1.0.0):**  
   Eliminated in-memory mocks in favor of disk JSON persistence (`.orion_memory/`). Created `run_suites.cjs`, establishing 40/40 passing test suites (Commit `139ecdb`).
-* **Late September 2026 — Benchmark Infrastructure & Native Input Fix (v1.0.1):**  
+* **Late September 2026 â€” Benchmark Infrastructure & Native Input Fix (v1.0.1):**  
   Created 10-task computer-use benchmark harness. Resolved Windows Session 0 desktop isolation via native Win32 P/Invoke utility, raising benchmark pass rate to 96.7% (Commit `f312538`).
 
 ---
@@ -284,10 +284,10 @@ Built strictly from verified Git commit history and release documentation:
 
 # Demonstration
 
-* **Demonstration Video:** `[Pending Recording — 3-Minute Technical Demonstration Script available in docs/demo-plan.md]`
+* **Demonstration Video:** `[Pending Recording â€” 3-Minute Technical Demonstration Script available in docs/demo-plan.md]`
 * **Architecture Diagram:** `[Text diagram in Architecture section; visual diagrams available in assets/diagrams/]`
-* **Benchmark Report:** [`benchmark/reports/latest-report.md`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/benchmark/reports/latest-report.md)
-* **Comparative Audit:** [`benchmark/reports/post-fix-comparison.md`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/benchmark/reports/post-fix-comparison.md)
+* **Benchmark Report:** [`benchmark/reports/latest-report.md`](../benchmark/reports/latest-report.md)
+* **Comparative Audit:** [`benchmark/reports/post-fix-comparison.md`](../benchmark/reports/post-fix-comparison.md)
 
 ---
 

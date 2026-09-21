@@ -1,7 +1,7 @@
-# ORION — Autonomous Permission-Based AI Computer-Use Agent
+# ORION — Permission-Based Windows Desktop AI Agent & Computer-Use Automation
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](docs/testing/testing.md)
-[![Test Suites](https://img.shields.io/badge/tests-40%2F40%20passed%20(100%25)-brightgreen.svg)](docs/testing/testing.md)
+[![Test Suites](https://img.shields.io/badge/tests-40%2F40%20passed%20--%20100%25-brightgreen.svg)](docs/testing/testing.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7.2-blue.svg)](tsconfig.json)
 [![Electron](https://img.shields.io/badge/Electron-33.2.1-47848F.svg)](package.json)
 [![React](https://img.shields.io/badge/React-18.3.1-61DAFB.svg)](package.json)
@@ -9,7 +9,7 @@
 [![Architecture](https://img.shields.io/badge/Architecture-Multi--Tier%20IPC-blueviolet.svg)](docs/architecture/architecture.md)
 
 > **"Ideas are ideas. Implementation is the real deal."**  
-> *ORION is an open-architecture, permission-based desktop AI agent engineered to understand screen context, formulate DAG-based action plans, execute native OS tools, and automate computer workflows under strict human supervision.*
+> *ORION is an open-architecture, permission-based desktop AI agent for Windows. It provides native Win32 input control, hardware telemetry inspection, DAG-based task orchestration, and closed-loop verification under strict human-in-the-loop governance.*
 
 ---
 
@@ -17,7 +17,7 @@
 
 **ORION** is the flagship technology project developed by **iMpact** (an independent software and AI initiative). 
 
-Unlike conventional AI chatbots that remain confined to isolated browser tabs, ORION operates directly on the desktop operating system. It interfaces with native Win32 APIs, inspects real-time hardware telemetry, decomposes complex user requests into structured tool dependency graphs, and executes actions with closed-loop verification — all while enforcing strict human-in-the-loop permission gates and an immediate hardware Emergency Stop.
+Unlike conventional AI chatbots that remain confined to isolated browser tabs, ORION operates directly on the Windows operating system. It interfaces with native Win32 APIs, inspects real-time hardware telemetry, decomposes user requests into structured tool dependency graphs, and executes actions with closed-loop verification — all while enforcing strict human-in-the-loop permission gates and an immediate process-tree Emergency Stop.
 
 * **Live Product Website:** [https://impacts-ai.com/orion](https://impacts-ai.com/orion)
 * **Initiative:** [iMpact — Technology that matters](https://impacts-ai.com)
@@ -88,22 +88,23 @@ flowchart TD
 
 ## 4. Current Capability Status (Evidence-Based)
 
-To maintain absolute engineering integrity, every capability is verified against actual test evidence:
+To maintain absolute engineering integrity, every capability is classified against empirical test evidence:
 
 | Capability | Status | Verified Evidence | Limitations | Next Step |
 | :--- | :--- | :--- | :--- | :--- |
-| **System Telemetry Monitoring** | **VERIFIED / WORKING** | Automated test pass (`DeepMasterIntegration.test.ts`). Live per-core CPU, RAM, and OS release metrics. | Disk queries via PowerShell CIM introduce ~100ms overhead. | Implement 10s caching for disk metrics. |
-| **Omnichannel AI Routing** | **VERIFIED / WORKING** | Automated test pass (`StreamingIntegration.test.ts`). Live OpenRouter test passed with HTTP 200 and 2.1s latency. | Requires internet and valid `.env` tokens. | Add dynamic TTFT latency ranking. |
-| **Deterministic Offline Fallback** | **VERIFIED / WORKING** | Automated test pass (`ComputerActionPlanner.test.ts`). Falls back to `offline-rule-router` when disconnected. | Uses regex heuristics, not neural text generation. | Connect local Ollama 14B model. |
-| **DAG Tool Execution** | **VERIFIED / WORKING** | Automated test pass (`Phase5AgentCore.test.ts`). Dependency resolution and argument substitution (`${step.N.output.key}`). | Parallelism restricted to read-only steps. | Add transactional rollback semantics. |
-| **Tool Permission Gates** | **VERIFIED / WORKING** | Automated test pass (`Phase8ActionSafety.test.ts`). Enforces 4 tiers (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`). | UI approval modal blocks execution thread. | Introduce cryptographic capability tokens. |
-| **Process Tree Emergency Stop** | **VERIFIED / WORKING** | Automated test pass (`ProcessSupervisorEstop.test.ts`). Terminated PID trees and rejects new spawns. | In-flight Win32 buffer events cannot be recalled. | Register global OS hotkey hook. |
-| **Desktop Screen Capture** | **VERIFIED / WORKING** | Automated test pass (`VisionIntegration.test.ts`). Electron `desktopCapturer` captures 1080p frames to DataURL. | Defaults to primary display source index 0. | Add DirectX DXGI capture (<16ms). |
-| **Desktop Automation Input** | **VERIFIED / WORKING** | Automated test pass (`InputControlService.test.ts`). Win32 `user32.dll` mouse events and `SendKeys` typing. | UAC elevated dialogs reject non-admin synthetic input. | Compile native C++ SendInput addon. |
-| **Speech Synthesis (TTS)** | **VERIFIED / WORKING** | Real audio emitted through Windows SAPI (`System.Speech`). Instant cancellation supported. | Output quality is standard robotic Windows SAPI voice. | Integrate local Piper / Kokoro neural TTS. |
-| **Multimodal Vision Analysis** | **PARTIALLY IMPLEMENTED** | `CloudVisionAdapter` interfaces with Gemini 2.0 Flash. Honest fallback when unconfigured. | Cloud round-trip latency is 1.8–3.2s. | Deploy local on-device VLM (Moondream2). |
-| **Speech Recognition (STT)** | **PARTIALLY IMPLEMENTED** | Typed interface ready. Browser Web Speech handles transcription in renderer. | Native backend STT provider is unconfigured. | Bind local Whisper.cpp engine. |
-| **UI Grounding & Element Tree** | **PARTIALLY IMPLEMENTED** | Windows UI Automation COM tree inspection implemented via PowerShell script. | Complex DOM traversal requires ~1.2s per dump. | Compile native C++ UIAutomation client. |
+| **System Telemetry Monitoring** | **VERIFIED** | Automated test pass (`DeepMasterIntegration.test.ts`). Live per-core CPU, RAM, and OS release metrics. | Disk queries via PowerShell CIM introduce ~100ms overhead. | Implement 10s caching for disk metrics. |
+| **Omnichannel AI Routing** | **VERIFIED** | Automated test pass (`StreamingIntegration.test.ts`). Live OpenRouter test passed with HTTP 200 and 2.1s latency. | Requires internet and valid `.env` tokens. | Add dynamic TTFT latency ranking. |
+| **Deterministic Offline Fallback** | **VERIFIED** | Automated test pass (`ComputerActionPlanner.test.ts`). Falls back to `offline-rule-router` when disconnected. | Uses regex heuristics, not neural text generation. | Connect local Ollama 14B model. |
+| **DAG Tool Execution** | **VERIFIED** | Automated test pass (`Phase5AgentCore.test.ts`). Dependency resolution and argument substitution (`${step.N.output.key}`). | Parallelism restricted to read-only steps. | Add transactional rollback semantics. |
+| **Tool Permission Gates** | **VERIFIED** | Automated test pass (`Phase8ActionSafety.test.ts`). Enforces 4 tiers (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`). | UI approval modal blocks execution thread. | Introduce cryptographic capability tokens. |
+| **Process Tree Emergency Stop** | **VERIFIED** | Automated test pass (`ProcessSupervisorEstop.test.ts`). Terminated PID trees and rejects new spawns. | In-flight Win32 buffer events cannot be recalled. | Register global OS hotkey hook. |
+| **Desktop Screen Capture** | **VERIFIED** | Automated test pass (`VisionIntegration.test.ts`). Electron `desktopCapturer` captures 1080p frames to DataURL. | Defaults to primary display source index 0. | Add DirectX DXGI capture (<16ms). |
+| **Native Mouse & Input Control** | **VERIFIED** | Automated test pass (`InputControlService.test.ts`) & Benchmark Task 06 (3/3 pass). Win32 `user32.dll` with desktop attachment. | UAC elevated dialogs reject non-admin synthetic input. | Compile native C++ SendInput addon. |
+| **Speech Synthesis (TTS)** | **VERIFIED** | Real audio emitted through Windows SAPI (`System.Speech`). Instant cancellation supported. | Output quality is standard robotic Windows SAPI voice. | Integrate local Piper / Kokoro neural TTS. |
+| **Cloud Multimodal Vision** | **PARTIAL** | `CloudVisionAdapter` interfaces with Gemini 2.0 Flash and OpenRouter. Honest fallback when unconfigured. | Cloud round-trip latency is 1.8–3.2s. | Deploy local on-device VLM (Moondream2). |
+| **UI Grounding & Element Tree** | **PARTIAL** | Windows UI Automation COM tree inspection implemented via PowerShell script. | Complex DOM traversal requires ~1.2s per dump. | Compile native C++ UIAutomation client. |
+| **Speech Recognition (STT)** | **PARTIAL** | Typed interface ready. Browser Web Speech handles transcription in renderer. | Native backend STT provider is unconfigured. | Bind local Whisper.cpp engine. |
+| **Local Multimodal VLM** | **PLANNED / UNCONFIGURED** | Architecture supports local model daemon; requires running GUI/daemon. | Not configured for offline multimodal inference. | Configure Florence-2 / Qwen2-VL locally. |
 
 *For complete capability breakdown, see [docs/capability-matrix.md](docs/capability-matrix.md).*
 
@@ -111,15 +112,19 @@ To maintain absolute engineering integrity, every capability is verified against
 
 ## 5. ORION Computer-Use Benchmark
 
-ORION is systematically validated using an automated 10-task, 30-run benchmark executing inside an isolated sandbox (`benchmark/sandbox/`):
+ORION is systematically evaluated using an automated 10-task benchmark executing across 3 consecutive trials (30 real executions) within an isolated filesystem sandbox (`benchmark/sandbox/`):
 
-* **Overall Success Rate:** **96.7%** (29/30 executions verified)
-* **Average Latency:** 1,539 ms (Median: 5 ms across local OS operations)
-* **Human Interventions:** **0** (Fully autonomous execution)
-* **Safety Verification:** **100% PASS** (Deterministic blocking of `C:\Windows\System32\` write attempts)
-* **Native Mouse Control:** **100% PASS** (3/3 runs verified with 0-pixel offset via compiled Win32 P/Invoke utility)
+> **Benchmark Framing Notice:** The 96.7% pass rate represents the measured outcome of this specific 10-task, 30-run automated test suite. It is not an assertion of universal reliability across arbitrary Windows third-party applications.
 
-*For complete benchmark artifacts, comparative analyses, and evidence mapping, see [benchmark/reports/latest-report.md](benchmark/reports/latest-report.md) and the [Master Developer Portfolio](reports/PORTFOLIO.md).*
+* **Benchmark Execution Result:** **29/30 successful executions (96.7%)** across 10 tasks and 30 real runs.
+* **Average Task Latency:** 1,539 ms (Median: 5 ms across local OS operations; cloud latency varies with provider).
+* **Human Interventions Required:** **0** across all 30 automated trials.
+* **Safety Invariant (Task 03):** **100% PASS** (3/3 runs deterministically blocked unauthorized write attempts to `C:\Windows\System32\`).
+* **Native Mouse Control (Task 06):** **100% PASS** (3/3 runs verified with 0-pixel offset via compiled Win32 thread-attached input utility; avg latency: 440 ms).
+* **Documented Failure:** Task 01 Run 3 (Workspace Initialization) encountered an external OpenRouter cloud API gateway timeout (32,234 ms); 0 local software or input errors.
+* **Historical Baseline (v1.0):** 27/30 runs passed (90.0%). All 3 failures were isolated to Task 06 mouse control due to Windows Session 0 / winstation desktop isolation returning `(0, 0)`. Resolved in v1.1 via active desktop thread attachment.
+
+*For complete benchmark artifacts, comparative analyses, and evidence mapping, see [benchmark/reports/latest-report.md](benchmark/reports/latest-report.md), [benchmark/reports/post-fix-comparison.md](benchmark/reports/post-fix-comparison.md), and the [Master Developer Portfolio](reports/PORTFOLIO.md).*
 
 ---
 
@@ -136,13 +141,13 @@ ORION is systematically validated using an automated 10-task, 30-run benchmark e
 
 ## 7. Workstation Hardware Profile
 
-ORION is engineered and benchmarked on a verified high-performance local AI workstation:
+ORION is engineered and benchmarked on a dedicated high-performance local AI workstation:
 
-* **Host System**: Dell Precision Mobile Workstation (`PRECISION-ULTRA-RTX`)
-* **Processor (CPU)**: 12th Gen Intel(R) Core(TM) i7-12850HX (16 Cores, 24 Logical Threads)
+* **Host System**: Dell Precision Mobile Workstation (Windows 11 Pro 64-bit)
+* **Processor (CPU)**: 12th Gen Intel Core i7-12850HX (16 Cores, 24 Logical Threads)
 * **System Memory (RAM)**: 128 GB DDR5
-* **Graphics Card (GPU)**: NVIDIA RTX A5500 Laptop GPU (16,384 MiB / 16 GB GDDR6 VRAM, Driver 596.71)
-* **Storage**: 1 TB PCIe 4.0 NVMe SSD
+* **Graphics Card (GPU)**: NVIDIA RTX A5500 Laptop GPU (16 GB GDDR6 ECC VRAM, Driver 596.71)
+* **Storage**: ~1 TB PCIe 4.0 NVMe SSD
 
 *For the complete local AI experimentation roadmap, see [docs/ai/local-models.md](docs/ai/local-models.md).*
 

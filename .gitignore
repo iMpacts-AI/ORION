@@ -42,3 +42,22 @@ Thumbs.db
 .orion_task_state/
 appdata_storage_backup/
 
+# Benchmark Execution Sandbox
+benchmark/sandbox/
+
+# Local Model Weights & LM Studio Cache
+*.gguf
+*.safetensors
+models/
+.lmstudio/
+
+# Private Credentials & Certificates
+*.pem
+*.key
+*.pfx
+*.cert
+*.crt
+
+# Temporary & Cache Files
+*.tmp
+temp/

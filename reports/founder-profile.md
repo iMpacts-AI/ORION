@@ -54,7 +54,7 @@ In early prototypes, like many junior developers, I used in-memory mocks and opt
 
 Recognizing that cloud API costs and latency are unsustainable for continuous desktop vision loops, I worked to design and acquire a dedicated local AI engineering workstation:
 
-* **Workstation:** Dell Precision Mobile Workstation (`PRECISION-ULTRA-RTX`)
+* **Workstation:** Dell Precision Mobile Workstation (Windows 11 Pro 64-bit)
 * **Compute:** 12th Gen Intel Core i7-12850HX (16 Cores, 24 Threads)
 * **Memory:** 128 GB High-Speed DDR5 RAM
 * **Graphics:** NVIDIA RTX A5500 Laptop GPU (16 GB Dedicated GDDR6 VRAM)
