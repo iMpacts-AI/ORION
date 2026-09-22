@@ -18,12 +18,19 @@ This document outlines the exact, repeatable procedure for demonstrating the ORI
 
 ## Startup
 
-1. **Terminal Launch:**
+1. **Instant Global CLI Launch (Recommended):**
+   ```bash
+   # From ANY Command Prompt or PowerShell:
+   orion demo
+   ```
+   *Automatically launches ORION directly focused on the Coders HQ Showcase Controller!*
+
+2. **Standard Developer Launch:**
    ```bash
    cd C:\Users\PRECISION-ULTRA-RTX\Downloads\ORION
    npm run dev
    ```
-2. **Pre-Flight Verification:**
+3. **Pre-Flight Verification:**
    * Electron desktop HUD opens at 1600×960 resolution.
    * Verify top navigation status shows `LOCAL IPC: ONLINE` and `STATE: STANDBY`.
    * Switch to the `[DEMO]` tab on the top mode navigation bar to access the dedicated Showcase Controller and live pipeline trace.

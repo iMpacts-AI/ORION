@@ -82,7 +82,8 @@ const api = {
     ipcRenderer.invoke('browser:type', { selector, text }),
   // Coders HQ Showcase & Demo Preload Channels
   getDemoHealthCheck: () => ipcRenderer.invoke('demo:get_health_check'),
-  resetDemo: () => ipcRenderer.invoke('demo:reset')
+  resetDemo: () => ipcRenderer.invoke('demo:reset'),
+  getInitialMode: () => ipcRenderer.invoke('app:get_initial_mode')
 };
 
 

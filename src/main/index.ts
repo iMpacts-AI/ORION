@@ -58,6 +58,11 @@ const visionService = new VisionService(cloudVisionAdapter);
 const orchestrator = new OrionOrchestrator(toolService, visionService, voiceService, omniRouter);
 
 function createWindow() {
+  const isDemo = process.env.ORION_INITIAL_MODE === 'DEMO' || process.argv.includes('--demo');
+  if (isDemo) {
+    process.env.ORION_INITIAL_MODE = 'DEMO';
+  }
+
   mainWindow = new BrowserWindow({
     width: 1600,
     height: 960,
@@ -81,7 +86,8 @@ function createWindow() {
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+    const devUrl = isDemo ? `${process.env.VITE_DEV_SERVER_URL}?mode=DEMO#demo` : process.env.VITE_DEV_SERVER_URL;
+    mainWindow.loadURL(devUrl);
   } else {
     const candidateHtmlPaths = [
       path.join(__dirname, '../../dist/index.html'),
@@ -91,7 +97,8 @@ function createWindow() {
       path.resolve(os.homedir(), 'Downloads/ORION/dist/index.html')
     ];
     const targetHtml = candidateHtmlPaths.find(p => fs.existsSync(p)) || candidateHtmlPaths[0];
-    mainWindow.loadFile(targetHtml).catch(err => {
+    const loadOptions = isDemo ? { query: { mode: 'DEMO' }, hash: 'demo' } : {};
+    mainWindow.loadFile(targetHtml, loadOptions).catch(err => {
       console.error('Failed to load html:', err);
     });
   }
@@ -512,6 +519,10 @@ function setupIPC() {
     titanPipeline.reset();
     titanBatchOrchestrator.reset();
     return { success: true, timestamp: Date.now() };
+  });
+
+  ipcMain.handle('app:get_initial_mode', async () => {
+    return process.env.ORION_INITIAL_MODE || 'COMMAND';
   });
 }
 

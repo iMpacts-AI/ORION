@@ -1,7 +1,7 @@
 # ORION — Permission-Based Windows Desktop AI Agent & Computer-Use Automation
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](docs/testing/testing.md)
-[![Test Suites](https://img.shields.io/badge/tests-41%2F41%20passed%20--%20100%25-brightgreen.svg)](docs/testing/testing.md)
+[![Test Suites](https://img.shields.io/badge/tests-42%2F42%20passed%20--%20100%25-brightgreen.svg)](docs/testing/testing.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7.2-blue.svg)](tsconfig.json)
 [![Electron](https://img.shields.io/badge/Electron-33.2.1-47848F.svg)](package.json)
 [![React](https://img.shields.io/badge/React-18.3.1-61DAFB.svg)](package.json)
@@ -153,14 +153,16 @@ ORION is engineered and benchmarked on a dedicated high-performance local AI wor
 
 ---
 
-## 8. Quickstart & Installation
+## 8. Quickstart & Global CLI Installation
 
 ### Prerequisites
 * **Operating System**: Windows 10/11 (x64)
 * **Node.js**: v18.0.0 or higher (v22 recommended)
 * **Package Manager**: npm v9+
 
-### Setup Instructions
+### Instant Setup (Global Command Line)
+You can register ORION as a permanent global system command — just like `agy`, `code`, or `cursor`:
+
 ```powershell
 # 1. Clone or extract the repository
 git clone https://github.com/iMpacts-AI/ORION.git
@@ -169,25 +171,41 @@ cd ORION
 # 2. Install dependencies
 npm install
 
-# 3. Configure environment variables
-copy .env.example .env
-# Edit .env and insert your API keys (optional: ORION operates in offline mode without keys)
+# 3. Register global 'orion' CLI command across Windows
+npm run setup:cli
+```
+*(Or simply double-click `install-cli.bat` in the repository root.)*
 
-# 4. Run automated test suites (40 suites in pure process isolation)
-npm test
+Once registered, you can launch ORION directly from **ANY** Command Prompt, PowerShell, or Windows Terminal window:
 
-# 5. Launch ORION in development mode
-npm run dev
+```powershell
+# Launch ORION desktop interface immediately
+orion
 
-# 6. Or compile production executable
-npm run build
+# Launch directly into Coders HQ Showcase & Demonstration mode
+orion demo
+
+# Launch with live hot-reloading (Vite dev server + Electron)
+orion dev
+
+# Run comprehensive system diagnostics (Node, Electron, API keys, tools)
+orion doctor
+
+# Execute complete 42-suite verification test harness
+orion test
+
+# Compile TypeScript and Vite production bundles
+orion build
+
+# View all commands and options
+orion --help
 ```
 
 ---
 
 ## 9. Coders HQ Live Demonstration & Showcase Mode
 
-ORION includes a dedicated, deterministic **Demo & Showcase Controller** accessible directly via the top navigation bar (`[DEMO]` tab). It exercises the authentic orchestration loop across 5 verified scenarios without fabricated results:
+ORION includes a dedicated, deterministic **Demo & Showcase Controller** accessible directly via the top navigation bar (`[DEMO]` tab) or by typing `orion demo`:
 
 1. **Basic Intelligence & Machine Overview**: Natural language query (`"ORION, give me a quick overview of this machine."`) decomposing into a concurrent 3-step DAG plan (`system.get_info`, `system.get_cpu_usage`, `system.get_memory_usage`).
 2. **Safe Tool Execution & Telemetry**: Native hardware sensor polling in single-digit milliseconds with execution IDs, durations, and core loads.
@@ -196,8 +214,8 @@ ORION includes a dedicated, deterministic **Demo & Showcase Controller** accessi
 5. **Failure Recovery & Autonomous Replanning**: Graceful handling of missing files, autonomous replanning recovery, and zero-crash stabilization.
 
 ```powershell
-# Launch ORION and navigate to the [DEMO] tab in the HUD:
-npm run dev
+# Instant Showcase Launch:
+orion demo
 ```
 
 *For complete step-by-step walkthroughs, latency benchmarks, and reset instructions, see [docs/DEMO.md](docs/DEMO.md).*
@@ -206,10 +224,10 @@ npm run dev
 
 ## 10. Automated Test Verification
 
-All 41 unit and integration test suites pass 100% green in pure process isolation:
+All 42 unit and integration test suites pass 100% green in pure process isolation:
 
 ```powershell
-=== RUNNING ALL 41 TEST SUITES IN PURE PROCESS ISOLATION ===
+=== RUNNING ALL 42 TEST SUITES IN PURE PROCESS ISOLATION ===
 
 RUNNING: CodersHQDemoSuite.test.ts ... [PASS]
 RUNNING: ComputerActionPlanner.test.ts ... [PASS]
@@ -222,13 +240,15 @@ RUNNING: ComputerUseService.test.ts ... [PASS]
 RUNNING: DeepMasterIntegration.test.ts ... [PASS]
 RUNNING: EndToEndIntegration.test.ts ... [PASS]
 RUNNING: InputControlService.test.ts ... [PASS]
+RUNNING: OrionCLILauncher.test.ts ... [PASS]
+RUNNING: Phase10AdaptiveComputerUse.test.ts ... [PASS]
 ...
 RUNNING: TitanPackagingPhase7B.test.ts ... [PASS]
 RUNNING: VisionIntegration.test.ts ... [PASS]
 
 ==================================================
-RESULTS: 41/41 SUITES PASSED 100% GREEN
-ALL 41 TEST SUITES PASSED IN PURE PROCESS ISOLATION!
+RESULTS: 42/42 SUITES PASSED 100% GREEN
+ALL 42 TEST SUITES PASSED IN PURE PROCESS ISOLATION!
 ```
 
 *For complete test traces and build outputs, see [docs/testing/testing.md](docs/testing/testing.md).*

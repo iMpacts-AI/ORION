@@ -5,10 +5,25 @@ import { HeaderNav } from './hud/HeaderNav';
 import { MainContentArea } from './hud/MainContentArea';
 import { Mic, Send } from 'lucide-react';
 
+const getInitialMode = (): OrionMode => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const queryMode = params.get('mode')?.toUpperCase();
+    if (queryMode && ['COMMAND', 'VISION', 'TOOLS', 'SETTINGS', 'SYSTEM', 'SUPERVISOR', 'DEMO'].includes(queryMode)) {
+      return queryMode as OrionMode;
+    }
+    const hashMode = window.location.hash.replace('#', '').toUpperCase();
+    if (hashMode && ['COMMAND', 'VISION', 'TOOLS', 'SETTINGS', 'SYSTEM', 'SUPERVISOR', 'DEMO'].includes(hashMode)) {
+      return hashMode as OrionMode;
+    }
+  } catch {}
+  return 'COMMAND';
+};
+
 export const App: React.FC = () => {
   // State Orchestration
   const [assistantState, setAssistantState] = useState<AssistantState>('STANDBY');
-  const [currentMode, setCurrentMode] = useState<OrionMode>('COMMAND');
+  const [currentMode, setCurrentMode] = useState<OrionMode>(getInitialMode);
   const [privacy, setPrivacy] = useState<PrivacyState>({
     micActive: false,
     cameraActive: false,
@@ -39,6 +54,15 @@ export const App: React.FC = () => {
     const unsubscribeMode = eventBus.subscribe('assistant.mode.changed', ({ mode }) => {
       setCurrentMode(mode);
     });
+
+    const apiInitial = window.orionApi || window.arvisApi;
+    if (apiInitial && (apiInitial as any).getInitialMode) {
+      (apiInitial as any).getInitialMode().then((mode: string) => {
+        if (mode && mode === 'DEMO') {
+          setCurrentMode('DEMO');
+        }
+      }).catch(() => {});
+    }
 
     // Real-time Telemetry & Supervisor Task polling loop
     const fetchTelemetry = async () => {

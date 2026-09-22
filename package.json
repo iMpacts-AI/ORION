@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "description": "ORION - AI Command System Desktop Assistant",
   "main": "dist-electron/main/index.js",
+  "bin": {
+    "orion": "./bin/orion.js"
+  },
   "scripts": {
-
     "dev": "node node_modules/vite/bin/vite.js",
     "build": "node node_modules/typescript/bin/tsc && node node_modules/vite/bin/vite.js build",
     "test": "node run_suites.cjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "install:cli": "node bin/install-cli.js",
+    "setup:cli": "node bin/install-cli.js"
   },
   "build": {
     "appId": "com.orion.assistant",
