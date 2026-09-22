@@ -210,7 +210,7 @@ orion dev
 # Run comprehensive system diagnostics (Node, Electron, API keys, tools)
 orion doctor
 
-# Execute complete 42-suite verification test harness
+# Execute complete 43-suite verification test harness
 orion test
 
 # Compile TypeScript and Vite production bundles
@@ -243,10 +243,10 @@ orion demo
 
 ## 10. Automated Test Verification
 
-All 42 unit and integration test suites pass 100% green in pure process isolation:
+All 43 unit and integration test suites pass 100% green in pure process isolation:
 
 ```powershell
-=== RUNNING ALL 42 TEST SUITES IN PURE PROCESS ISOLATION ===
+=== RUNNING ALL 43 TEST SUITES IN PURE PROCESS ISOLATION ===
 
 RUNNING: CodersHQDemoSuite.test.ts ... [PASS]
 RUNNING: ComputerActionPlanner.test.ts ... [PASS]
@@ -260,14 +260,15 @@ RUNNING: DeepMasterIntegration.test.ts ... [PASS]
 RUNNING: EndToEndIntegration.test.ts ... [PASS]
 RUNNING: InputControlService.test.ts ... [PASS]
 RUNNING: OrionCLILauncher.test.ts ... [PASS]
+RUNNING: OrionNaturalLanguageCommand.test.ts ... [PASS]
 RUNNING: Phase10AdaptiveComputerUse.test.ts ... [PASS]
 ...
 RUNNING: TitanPackagingPhase7B.test.ts ... [PASS]
 RUNNING: VisionIntegration.test.ts ... [PASS]
 
 ==================================================
-RESULTS: 42/42 SUITES PASSED 100% GREEN
-ALL 42 TEST SUITES PASSED IN PURE PROCESS ISOLATION!
+RESULTS: 43/43 SUITES PASSED 100% GREEN
+ALL 43 TEST SUITES PASSED IN PURE PROCESS ISOLATION!
 ```
 
 *For complete test traces and build outputs, see [docs/testing/testing.md](docs/testing/testing.md).*
