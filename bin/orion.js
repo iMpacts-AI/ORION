@@ -200,7 +200,9 @@ function runDoctor() {
 
   // 4. Test harness check
   const runnerExists = fs.existsSync(path.join(PROJECT_ROOT, 'run_suites.cjs'));
-  console.log(`Test Harness:       ${runnerExists ? '\x1b[32m[PASS] 41 test suites configured\x1b[0m' : '\x1b[31m[FAIL] Missing run_suites.cjs\x1b[0m'}`);
+  const testDir = path.join(PROJECT_ROOT, 'src/main/services/__tests__');
+  const suiteCount = fs.existsSync(testDir) ? fs.readdirSync(testDir).filter(f => f.endsWith('.test.ts')).length : 42;
+  console.log(`Test Harness:       ${runnerExists ? `\x1b[32m[PASS] ${suiteCount} test suites configured\x1b[0m` : '\x1b[31m[FAIL] Missing run_suites.cjs\x1b[0m'}`);
 
   // 5. Environment keys (.env)
   const envPath = path.join(PROJECT_ROOT, '.env');
