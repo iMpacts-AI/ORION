@@ -8,6 +8,7 @@ import { MemoryScreen } from '../screens/MemoryScreen';
 import { ComputerScreen } from '../screens/ComputerScreen';
 import { VisionScreen } from '../screens/VisionScreen';
 import { ProviderNetworkScreen } from '../screens/ProviderNetworkScreen';
+import { DemoScreen } from '../screens/DemoScreen';
 import { TitanHUDPanel } from './TitanHUDPanel';
 import { Globe, Cpu, Wifi, Layers, Zap } from 'lucide-react';
 
@@ -71,6 +72,8 @@ export const MainContentArea: React.FC<MainContentAreaProps> = ({
 
   // Render Dedicated Screen Modes
   switch (currentMode) {
+    case 'DEMO':
+      return <DemoScreen />;
     case 'MEMORY':
       return <MemoryScreen />;
     case 'COMPUTER':

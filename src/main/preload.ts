@@ -79,7 +79,10 @@ const api = {
     ipcRenderer.invoke('browser:navigate', { url, openInExternal }),
   browserClick: (selector: string) => ipcRenderer.invoke('browser:click', selector),
   browserType: (selector: string, text: string) =>
-    ipcRenderer.invoke('browser:type', { selector, text })
+    ipcRenderer.invoke('browser:type', { selector, text }),
+  // Coders HQ Showcase & Demo Preload Channels
+  getDemoHealthCheck: () => ipcRenderer.invoke('demo:get_health_check'),
+  resetDemo: () => ipcRenderer.invoke('demo:reset')
 };
 
 

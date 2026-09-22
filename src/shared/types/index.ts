@@ -37,7 +37,8 @@ export type OrionMode =
   | 'WORLD'
   | 'TASK'
   | 'MEMORY'
-  | 'TITAN';
+  | 'TITAN'
+  | 'DEMO';
 
 
 export type ArvisMode = OrionMode;

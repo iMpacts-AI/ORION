@@ -39,6 +39,7 @@ export interface OrionElectronApi {
   getMemories: () => Promise<MemoryItem[]>;
   saveMemory: (item: Omit<MemoryItem, 'id' | 'createdAt' | 'updatedAt'>) => Promise<MemoryItem>;
   deleteMemory: (id: string) => Promise<boolean>;
+  clearConversation?: () => Promise<boolean>;
   getSupervisorTasks?: () => Promise<any[]>;
   getEnvironmentState?: () => Promise<any>;
   getTrace?: (traceId: string) => Promise<any>;
@@ -74,6 +75,8 @@ export interface OrionElectronApi {
   browserNavigate?: (url: string, openInExternal?: boolean) => Promise<any>;
   browserClick?: (selector: string) => Promise<any>;
   browserType?: (selector: string, text: string) => Promise<any>;
+  getDemoHealthCheck?: () => Promise<any>;
+  resetDemo?: () => Promise<any>;
 }
 
 

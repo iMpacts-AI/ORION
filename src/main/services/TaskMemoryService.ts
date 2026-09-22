@@ -73,4 +73,9 @@ export class TaskMemoryService {
   public getTasks(): AgentTask[] {
     return Array.from(this.activeTasks.values());
   }
+
+  public clearTasks(): void {
+    this.activeTasks.clear();
+    this.currentTaskId = null;
+  }
 }

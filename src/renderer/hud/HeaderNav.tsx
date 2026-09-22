@@ -13,6 +13,7 @@ interface HeaderNavProps {
 
 const MODES: OrionMode[] = [
   'COMMAND',
+  'DEMO',
   'SYSTEM',
   'VISION',
   'COMPUTER',
@@ -129,13 +130,18 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
       <div className="flex space-x-1 border-t border-arvis-border/60 pt-2 overflow-x-auto">
         {MODES.map((mode) => {
           const isActive = currentMode === mode;
+          const isDemo = mode === 'DEMO';
           return (
             <button
               key={mode}
               onClick={() => onModeSelect(mode)}
               className={`px-4 py-1.5 text-[11px] font-mono font-semibold tracking-wider transition-all border ${
                 isActive
-                  ? 'border-arvis-accent bg-arvis-accent/20 text-arvis-text shadow-[0_0_12px_rgba(255,42,95,0.25)]'
+                  ? isDemo
+                    ? 'border-arvis-cyan bg-arvis-cyan/20 text-arvis-cyan shadow-[0_0_12px_rgba(0,240,255,0.3)]'
+                    : 'border-arvis-accent bg-arvis-accent/20 text-arvis-text shadow-[0_0_12px_rgba(255,42,95,0.25)]'
+                  : isDemo
+                  ? 'border-arvis-cyan/40 bg-arvis-cyan/5 text-arvis-cyan hover:bg-arvis-cyan/15 hover:border-arvis-cyan'
                   : 'border-arvis-border/40 bg-black/30 text-arvis-dim hover:text-arvis-text hover:border-arvis-border'
               }`}
             >

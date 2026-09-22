@@ -176,7 +176,15 @@ export class ToolService implements IToolService {
             throw new Error('Parameter "filePath" is required.');
           }
           const lowerPath = filePath.toLowerCase();
-          if (lowerPath.includes('do_not_enter') || lowerPath.includes('restricted') || lowerPath.includes('classified')) {
+          if (
+            lowerPath.includes('do_not_enter') ||
+            lowerPath.includes('restricted') ||
+            lowerPath.includes('classified') ||
+            lowerPath.includes('windows') ||
+            lowerPath.includes('system32') ||
+            lowerPath.includes('/etc/') ||
+            lowerPath.includes('5_render_exports')
+          ) {
             throw new Error(`SECURITY POLICY VIOLATION: Access to restricted boundary '${filePath}' is strictly prohibited. Security containment enforced.`);
           }
           const resolvedPath = path.resolve(filePath);
@@ -203,7 +211,15 @@ export class ToolService implements IToolService {
             throw new Error('Parameters "filePath" and "content" are required.');
           }
           const lowerPath = filePath.toLowerCase();
-          if (lowerPath.includes('do_not_enter') || lowerPath.includes('restricted') || lowerPath.includes('classified')) {
+          if (
+            lowerPath.includes('do_not_enter') ||
+            lowerPath.includes('restricted') ||
+            lowerPath.includes('classified') ||
+            lowerPath.includes('windows') ||
+            lowerPath.includes('system32') ||
+            lowerPath.includes('/etc/') ||
+            lowerPath.includes('5_render_exports')
+          ) {
             throw new Error(`SECURITY POLICY VIOLATION: Writing into restricted boundary '${filePath}' is strictly prohibited. Security containment enforced.`);
           }
           const resolvedPath = path.resolve(filePath);

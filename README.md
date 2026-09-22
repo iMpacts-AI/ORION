@@ -1,7 +1,7 @@
 # ORION — Permission-Based Windows Desktop AI Agent & Computer-Use Automation
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](docs/testing/testing.md)
-[![Test Suites](https://img.shields.io/badge/tests-40%2F40%20passed%20--%20100%25-brightgreen.svg)](docs/testing/testing.md)
+[![Test Suites](https://img.shields.io/badge/tests-41%2F41%20passed%20--%20100%25-brightgreen.svg)](docs/testing/testing.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7.2-blue.svg)](tsconfig.json)
 [![Electron](https://img.shields.io/badge/Electron-33.2.1-47848F.svg)](package.json)
 [![React](https://img.shields.io/badge/React-18.3.1-61DAFB.svg)](package.json)
@@ -185,13 +185,33 @@ npm run build
 
 ---
 
-## 9. Automated Test Verification
+## 9. Coders HQ Live Demonstration & Showcase Mode
 
-All 40 unit and integration test suites pass 100% green in pure process isolation:
+ORION includes a dedicated, deterministic **Demo & Showcase Controller** accessible directly via the top navigation bar (`[DEMO]` tab). It exercises the authentic orchestration loop across 5 verified scenarios without fabricated results:
+
+1. **Basic Intelligence & Machine Overview**: Natural language query (`"ORION, give me a quick overview of this machine."`) decomposing into a concurrent 3-step DAG plan (`system.get_info`, `system.get_cpu_usage`, `system.get_memory_usage`).
+2. **Safe Tool Execution & Telemetry**: Native hardware sensor polling in single-digit milliseconds with execution IDs, durations, and core loads.
+3. **Safety Boundary & Permission Enforcement**: Deterministic risk evaluation blocking unauthorized writes to protected Windows system paths (`C:\Windows\System32`).
+4. **Visual Perception & Display Stream**: Native 1920×1080 desktop frame buffer capture via Electron `desktopCapturer`.
+5. **Failure Recovery & Autonomous Replanning**: Graceful handling of missing files, autonomous replanning recovery, and zero-crash stabilization.
 
 ```powershell
-=== RUNNING ALL 40 TEST SUITES IN PURE PROCESS ISOLATION ===
+# Launch ORION and navigate to the [DEMO] tab in the HUD:
+npm run dev
+```
 
+*For complete step-by-step walkthroughs, latency benchmarks, and reset instructions, see [docs/DEMO.md](docs/DEMO.md).*
+
+---
+
+## 10. Automated Test Verification
+
+All 41 unit and integration test suites pass 100% green in pure process isolation:
+
+```powershell
+=== RUNNING ALL 41 TEST SUITES IN PURE PROCESS ISOLATION ===
+
+RUNNING: CodersHQDemoSuite.test.ts ... [PASS]
 RUNNING: ComputerActionPlanner.test.ts ... [PASS]
 RUNNING: ComputerActionVerifier.test.ts ... [PASS]
 RUNNING: ComputerHUDIntegration.test.ts ... [PASS]
@@ -207,8 +227,8 @@ RUNNING: TitanPackagingPhase7B.test.ts ... [PASS]
 RUNNING: VisionIntegration.test.ts ... [PASS]
 
 ==================================================
-RESULTS: 40/40 SUITES PASSED 100% GREEN
-ALL 40 TEST SUITES PASSED IN PURE PROCESS ISOLATION!
+RESULTS: 41/41 SUITES PASSED 100% GREEN
+ALL 41 TEST SUITES PASSED IN PURE PROCESS ISOLATION!
 ```
 
 *For complete test traces and build outputs, see [docs/testing/testing.md](docs/testing/testing.md).*

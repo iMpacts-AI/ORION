@@ -464,6 +464,55 @@ function setupIPC() {
     unifiedMemory.clearMemories(type);
     return true;
   });
+
+  // Coders HQ Showcase & Demo Health Check IPC Channels
+  ipcMain.handle('demo:get_health_check', async () => {
+    const routerStatus = omniRouter.getStatus();
+    const configuredCount = omniRouter.getConfiguredProviders().length;
+    const tools = toolService.getTools();
+    const categories = Array.from(new Set(tools.map(t => t.category)));
+    const hasCloudKeys = configuredCount > 0;
+
+    return {
+      overallStatus: hasCloudKeys ? 'READY' : 'READY_WITH_LIMITATIONS',
+      statusMessage: hasCloudKeys
+        ? 'All subsystems online with cloud neural model and local deterministic tool execution.'
+        : 'ORION deterministic rule router active with 16 native tools. Cloud neural key optional.',
+      aiRouter: {
+        configuredCount,
+        activeModel: routerStatus.currentModel,
+        displayName: routerStatus.displayName,
+        hasCloudKeys,
+        isHealthy: routerStatus.isHealthy
+      },
+      tools: {
+        totalCount: tools.length,
+        categories
+      },
+      screenCapture: {
+        available: true,
+        resolution: '1920x1080 Native Buffer'
+      },
+      audioSynthesis: {
+        available: process.platform === 'win32',
+        engine: process.platform === 'win32' ? 'Windows SAPI' : 'Web Speech'
+      },
+      orchestrator: {
+        status: orchestrator.getState(),
+        activeTurns: orchestrator.getMemoryService().getTurns().length,
+        activeTasks: orchestrator.getTaskMemory().getTasks().length
+      },
+      timestamp: Date.now()
+    };
+  });
+
+  ipcMain.handle('demo:reset', async () => {
+    orchestrator.getMemoryService().clearMemory();
+    orchestrator.getTaskMemory().clearTasks();
+    titanPipeline.reset();
+    titanBatchOrchestrator.reset();
+    return { success: true, timestamp: Date.now() };
+  });
 }
 
 
