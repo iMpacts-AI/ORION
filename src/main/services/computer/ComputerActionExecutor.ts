@@ -275,11 +275,22 @@ export class ComputerActionExecutor {
                 ['notepad', 'notepad.exe'],
                 ['chrome', 'chrome.exe'],
                 ['code', 'code.cmd'],
+                ['vscode', 'code.cmd'],
                 ['explorer', 'explorer.exe'],
-                ['calc', 'calc.exe']
+                ['files', 'explorer.exe'],
+                ['calc', 'calc.exe'],
+                ['calculator', 'calc.exe'],
+                ['edge', 'msedge.exe'],
+                ['msedge', 'msedge.exe'],
+                ['paint', 'mspaint.exe'],
+                ['mspaint', 'mspaint.exe'],
+                ['terminal', 'powershell.exe'],
+                ['powershell', 'powershell.exe'],
+                ['cmd', 'cmd.exe'],
+                ['taskmgr', 'taskmgr.exe']
               ]);
               const baseName = rawApp.toLowerCase().replace(/\.exe$/, '');
-              const sanitizedExe = ALLOWED_APPS.get(baseName);
+              const sanitizedExe = ALLOWED_APPS.get(baseName) || (ALLOWED_APPS.has(rawApp.toLowerCase()) ? ALLOWED_APPS.get(rawApp.toLowerCase()) : null);
               if (!sanitizedExe) {
                 throw new Error(`[SECURITY BLOCKED] Disallowed or unregistered application: '${rawApp}'. Application launch must be in authorized whitelist.`);
               }
@@ -290,7 +301,10 @@ export class ComputerActionExecutor {
                   await new Promise(r => setTimeout(r, 600));
                   await this.windowManager.focusWindow(sanitizedExe);
                 } catch (e: any) {
-                  // Ignore launch errors if process already started
+                  // Fallback: Ensure app window is brought to front
+                  try {
+                    await this.windowManager.focusWindow(sanitizedExe);
+                  } catch (focusErr) {}
                 }
               }
             }

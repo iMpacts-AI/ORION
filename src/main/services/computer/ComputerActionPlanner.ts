@@ -219,6 +219,86 @@ Command: "${naturalLanguageCommand}"`;
       });
     }
 
+    // 2B. Direct Application Launching (Notepad, Calculator, Terminal, Code, Explorer, etc.)
+    else if (
+      commandLower.includes('open notepad') ||
+      commandLower.includes('launch notepad') ||
+      commandLower.includes('open calc') ||
+      commandLower.includes('open calculator') ||
+      commandLower.includes('open terminal') ||
+      commandLower.includes('open powershell') ||
+      commandLower.includes('open cmd') ||
+      commandLower.includes('open paint') ||
+      commandLower.includes('open task manager') ||
+      commandLower.startsWith('open ') ||
+      commandLower.startsWith('launch ') ||
+      commandLower.startsWith('start ') ||
+      commandLower.includes('try and open')
+    ) {
+      let appName = 'notepad';
+      if (commandLower.includes('notepad')) appName = 'notepad';
+      else if (commandLower.includes('calc')) appName = 'calc';
+      else if (commandLower.includes('chrome')) appName = 'chrome';
+      else if (commandLower.includes('code') || commandLower.includes('vscode')) appName = 'code';
+      else if (commandLower.includes('explorer') || commandLower.includes('files') || commandLower.includes('folder')) appName = 'explorer';
+      else if (commandLower.includes('cmd') || commandLower.includes('command prompt')) appName = 'cmd';
+      else if (commandLower.includes('terminal') || commandLower.includes('powershell')) appName = 'powershell';
+      else if (commandLower.includes('paint') || commandLower.includes('mspaint')) appName = 'paint';
+      else if (commandLower.includes('taskmgr') || commandLower.includes('task manager')) appName = 'taskmgr';
+      else if (commandLower.includes('edge')) appName = 'edge';
+      else {
+        const appMatch = naturalLanguageCommand.match(/(?:open|launch|start|focus)\s+(?:the\s+)?([a-zA-Z0-9_\-]+)/i);
+        if (appMatch) appName = appMatch[1].trim().toLowerCase();
+      }
+
+      actions.push({
+        id: `act_${Date.now()}_1`,
+        type: 'OPEN_APP',
+        target: appName,
+        parameters: { appName },
+        confidence: 0.98,
+        riskLevel: 'LOW_RISK',
+        reason: `Launch application ${appName}`,
+        postconditions: {
+          verifyActiveApp: appName
+        }
+      });
+
+      actions.push({
+        id: `act_${Date.now()}_2`,
+        type: 'FOCUS_WINDOW',
+        target: appName,
+        confidence: 0.98,
+        riskLevel: 'LOW_RISK',
+        reason: `Bring ${appName} window to the foreground`,
+        postconditions: {
+          verifyActiveWindow: appName
+        }
+      });
+
+      // If user also requested typing
+      if (commandLower.includes('type ') || commandLower.includes('write ')) {
+        const textMatch = naturalLanguageCommand.match(/(?:type|write)\s+["']?([^"']+)["']?/i);
+        const textToType = textMatch ? textMatch[1].trim() : 'ORION OS AUTOMATION';
+        actions.push({
+          id: `act_${Date.now()}_3`,
+          type: 'KEYBOARD_INPUT',
+          parameters: { text: textToType },
+          confidence: 0.95,
+          riskLevel: 'LOW_RISK',
+          reason: `Type payload into ${appName}`
+        });
+      }
+
+      actions.push({
+        id: `act_${Date.now()}_4`,
+        type: 'OBSERVE_SCREEN',
+        confidence: 0.95,
+        riskLevel: 'READ_ONLY',
+        reason: `Verify ${appName} window is active and displayed`
+      });
+    }
+
     // 3. Application Switching / Window Control
     else if (commandLower.includes('switch to') || commandLower.includes('focus')) {
       const match = naturalLanguageCommand.match(/(?:switch to|focus)\s+["']?([^"']+)["']?/i);

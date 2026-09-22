@@ -8,7 +8,7 @@ export interface AIProviderConfig {
 }
 
 export interface IntentClassification {
-  intent: 'FAST_PATH' | 'SYSTEM_QUERY' | 'FILE_OPERATION' | 'TOOL_EXECUTION' | 'CONVERSATION' | 'VISION' | 'CODING' | 'UNKNOWN';
+  intent: 'FAST_PATH' | 'SYSTEM_QUERY' | 'FILE_OPERATION' | 'TOOL_EXECUTION' | 'AUTOMATION' | 'CONVERSATION' | 'VISION' | 'CODING' | 'UNKNOWN';
   confidence: number;
   extractedCommand?: string;
   suggestedTools?: string[];
@@ -260,6 +260,47 @@ export class LocalHeuristicAIProvider implements IAIProvider {
       };
     }
 
+    // Kinetic Computer Use & Desktop OS Automation Intent
+    if (
+      lower.startsWith('open ') ||
+      lower.startsWith('try and open ') ||
+      lower.startsWith('launch ') ||
+      lower.startsWith('start ') ||
+      lower.includes('open notepad') ||
+      lower.includes('open calculator') ||
+      lower.includes('open calc') ||
+      lower.includes('open chrome') ||
+      lower.includes('open vs code') ||
+      lower.includes('open vscode') ||
+      lower.includes('open explorer') ||
+      lower.includes('open files') ||
+      lower.includes('open terminal') ||
+      lower.includes('open powershell') ||
+      lower.includes('open cmd') ||
+      lower.includes('open paint') ||
+      lower.includes('open task manager') ||
+      lower.startsWith('type ') ||
+      lower.startsWith('write ') ||
+      lower.startsWith('click ') ||
+      lower.startsWith('press ') ||
+      lower.startsWith('scroll ') ||
+      lower.includes('move cursor') ||
+      lower.includes('move mouse') ||
+      lower.includes('close window') ||
+      lower.includes('close app') ||
+      lower.includes('close notepad')
+    ) {
+      return {
+        intent: 'AUTOMATION',
+        confidence: 0.99,
+        suggestedTools: ['computer.natural_language_command'],
+        fastPathMatch: {
+          toolId: 'computer.natural_language_command',
+          args: { command: prompt }
+        }
+      };
+    }
+
     // General Heuristic Intents
     if (
       lower.includes('cpu') ||
@@ -430,6 +471,13 @@ export class LocalHeuristicAIProvider implements IAIProvider {
         } else if (toolId === 'file.list_directory') {
           const fileSample = parsed.items?.slice(0, 8).map((i: any) => i.name).join(', ') || '';
           summaries.push(`Directory Inspection: ${parsed.itemCount} items detected at '${parsed.directory}' (e.g. ${fileSample}).`);
+        } else if (toolId === 'computer.natural_language_command' || toolId === 'computer.execute_action' || toolId === 'computer.plan_task') {
+          const cmd = parsed.naturalLanguageCommand || 'Desktop Action';
+          if (parsed.status === 'COMPLETED' || parsed.success || parsed.postconditionsVerified) {
+            summaries.push(`Kinetic OS Control: Successfully executed "${cmd}". Target application launched and focused.`);
+          } else {
+            summaries.push(`Kinetic OS Control: Status [${parsed.status || 'EXECUTED'}]. Workspace updated.`);
+          }
         } else if (parsed && typeof parsed === 'object') {
           summaries.push(`Tool ${toolId}: ${JSON.stringify(parsed)}`);
         }

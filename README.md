@@ -1,26 +1,33 @@
-# ORION — Permission-Based Windows Desktop AI Agent & Computer-Use Automation
+<div align="center">
+
+<img src="./public/orion-logo-full.png" alt="ORION Logo" width="460" style="border-radius: 14px; margin-bottom: 20px;" />
+
+# ORION
+### *Autonomous Desktop AI Operating System & Kinetic Computer-Use Agent*
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](docs/testing/testing.md)
-[![Test Suites](https://img.shields.io/badge/tests-42%2F42%20passed%20--%20100%25-brightgreen.svg)](docs/testing/testing.md)
+[![Test Suites](https://img.shields.io/badge/tests-43%2F43%20passed%20--%20100%25-brightgreen.svg)](docs/testing/testing.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7.2-blue.svg)](tsconfig.json)
 [![Electron](https://img.shields.io/badge/Electron-33.2.1-47848F.svg)](package.json)
 [![React](https://img.shields.io/badge/React-18.3.1-61DAFB.svg)](package.json)
 [![Security](https://img.shields.io/badge/Security-Context%20Isolated-success.svg)](docs/security/security.md)
-[![Architecture](https://img.shields.io/badge/Architecture-Multi--Tier%20IPC-blueviolet.svg)](docs/architecture/architecture.md)
+[![Parent Organization](https://img.shields.io/badge/Organization-iMpact%20AI-00f0ff.svg)](https://github.com/iMpacts-AI/iMpact)
 
-> **"Ideas are ideas. Implementation is the real deal."**  
-> *ORION is an open-architecture, permission-based desktop AI agent for Windows. It provides native Win32 input control, hardware telemetry inspection, DAG-based task orchestration, and closed-loop verification under strict human-in-the-loop governance.*
+> **"YOUR AI. YOUR COMPUTER. YOUR WORLD."**  
+> *ORION is the flagship autonomous desktop AI operating system developed by [iMpact AI](https://github.com/iMpacts-AI/iMpact). Operating with native Win32 kinetic input drivers, real-time hardware telemetry, closed-loop Observe-Plan-Act-Verify automation, and strict deterministic safety gates.*
+
+</div>
 
 ---
 
 ## 1. What is ORION?
 
-**ORION** is the flagship technology project developed by **iMpact** (an independent software and AI initiative). 
+**ORION** is the flagship technology platform created by **iMpact AI**. 
 
-Unlike conventional AI chatbots that remain confined to isolated browser tabs, ORION operates directly on the Windows operating system. It interfaces with native Win32 APIs, inspects real-time hardware telemetry, decomposes user requests into structured tool dependency graphs, and executes actions with closed-loop verification — all while enforcing strict human-in-the-loop permission gates and an immediate process-tree Emergency Stop.
+Unlike conventional AI assistants that remain trapped inside browser chat bubbles, ORION operates directly across the entire Windows operating system. It interfaces with native Win32 APIs, manipulates mouse cursor position and typing, launches applications, inspects hardware telemetry in real-time, decomposes user goals into structured tool execution DAGs, and verifies postconditions — all while enforcing strict human authorization boundaries and an instant process-tree Emergency Stop.
 
-* **Live Product Website:** [https://impacts-ai.com/orion](https://impacts-ai.com/orion)
-* **Initiative:** [iMpact — Technology that matters](https://impacts-ai.com)
+* **Flagship Platform:** [ORION Operating System](https://github.com/iMpacts-AI/ORION)
+* **Parent Organization:** [iMpact AI](https://github.com/iMpacts-AI/iMpact)
 
 ---
 

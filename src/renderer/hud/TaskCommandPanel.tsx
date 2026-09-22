@@ -37,21 +37,21 @@ export const TaskCommandPanel: React.FC<TaskCommandPanelProps> = ({ currentTask 
       {/* Background Accent Scan Line */}
       <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-60" />
 
-      {/* Left Section: ORION BRAIN Provider Status */}
-      <div className="flex items-center space-x-3.5 min-w-[320px]">
+      {/* Left Section: ORION QUANTUM SECTOR MATRIX */}
+      <div className="flex items-center space-x-3.5 min-w-[340px]">
         <div className="p-2 bg-blue-500/10 border border-blue-400/30 text-cyan-300 rounded-md shadow-[0_0_12px_rgba(56,189,248,0.25)]">
           <Zap className="w-5 h-5 animate-pulse" />
         </div>
         <div>
           <div className="flex items-center space-x-1.5">
-            <span className="text-[10px] text-slate-400 tracking-wider uppercase font-bold font-mono">ORION NEURAL BRAIN</span>
+            <span className="text-[10px] text-cyan-400 tracking-wider uppercase font-bold font-mono">ORION QUANTUM SECTOR</span>
             <span className={`w-2 h-2 rounded-full ${brainStatus?.isHealthy ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-amber-400 animate-ping'}`} />
           </div>
           <div className="font-semibold text-white text-xs tracking-wide font-mono flex items-center space-x-2">
-            <span className="text-cyan-300">{brainStatus ? brainStatus.displayName : 'ORION Native Router'}</span>
+            <span className="text-cyan-300 font-bold">{brainStatus ? brainStatus.displayName : 'SECTOR 00 // KERNEL AUTONOMOUS CORE'}</span>
           </div>
-          <div className="text-[9px] text-slate-400 font-mono">
-            MODEL: {brainStatus ? brainStatus.currentModel : 'Offline Heuristic'} | FAILOVER: {configuredCount} CLOUD
+          <div className="text-[9px] text-slate-400 font-mono truncate max-w-[300px]">
+            {brainStatus ? brainStatus.currentModel : 'Zero-Latency Deterministic Micro-Kernel [Sovereign Grid]'}
           </div>
         </div>
       </div>

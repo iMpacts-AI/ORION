@@ -1,4 +1,4 @@
-﻿import { ChildProcess, spawn, SpawnOptions } from 'child_process';
+import { ChildProcess, spawn, SpawnOptions } from 'child_process';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { eventBus } from '../../../shared/events';
@@ -178,6 +178,18 @@ export class ProcessSupervisor {
       }
 
       this.registerProcess(processId, `${command} ${args.join(' ')}`, child, abortController, true);
+
+      if (options.detached) {
+        clearTimeout(timer);
+        if (typeof child.unref === 'function') {
+          child.unref();
+        }
+        return resolve({
+          stdout: '',
+          stderr: '',
+          exitCode: 0
+        });
+      }
 
       if (child.stdout) {
         child.stdout.on('data', (chunk) => {

@@ -191,13 +191,36 @@ export class OrionAIProviderRouter implements IAIProvider {
     );
   }
 
+  private getSectorInfo(providerId: string): { sectorName: string; engineClass: string } {
+    switch (providerId) {
+      case 'groq':
+        return { sectorName: 'SECTOR 01 // HYPERION LPU CORE', engineClass: 'Sub-Second Quantum LPU Engine' };
+      case 'gemini':
+        return { sectorName: 'SECTOR 02 // AETHER PERCEPTION MESH', engineClass: 'Deep Multimodal Synapse Core' };
+      case 'openrouter':
+        return { sectorName: 'SECTOR 03 // POLARIS SOVEREIGN NEXUS', engineClass: 'Autonomous Agentic Cluster' };
+      case 'github-models':
+        return { sectorName: 'SECTOR 04 // CHRONOS SYNTHESIS HUB', engineClass: 'High-Fidelity Reasoning Engine' };
+      case 'cerebras':
+        return { sectorName: 'SECTOR 05 // QUANTUM WAFER FABRIC', engineClass: 'Ultra-Throughput Compute Layer' };
+      case 'mistral':
+        return { sectorName: 'SECTOR 06 // VORTEX COMPILER MATRIX', engineClass: 'Algorithmic Systems Engine' };
+      case 'nvidia':
+        return { sectorName: 'SECTOR 07 // TITAN ACCELERATED CORE', engineClass: 'Tensor Parallel Intelligence' };
+      case 'deepseek':
+        return { sectorName: 'SECTOR 08 // ECLIPSE DEEP REASONING', engineClass: 'Cognitive Architecture' };
+      default:
+        return { sectorName: 'SECTOR 00 // KERNEL AUTONOMOUS CORE', engineClass: 'Zero-Latency Micro-Kernel Engine' };
+    }
+  }
+
   public getStatus(): ProviderStatus {
     const active = this.currentActiveProvider.getStatus();
-    const configuredCount = this.getConfiguredProviders().length;
+    const sector = this.getSectorInfo(active.id);
     return {
       ...active,
-      displayName: `ORION Omni-Brain (${active.displayName})`,
-      currentModel: `${active.currentModel} [Backups: ${configuredCount}]`
+      displayName: sector.sectorName,
+      currentModel: `${sector.engineClass} [Sovereign Grid: 10 Sectors]`
     };
   }
 

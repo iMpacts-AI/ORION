@@ -167,6 +167,47 @@ export abstract class BaseCloudProviderAdapter implements IAIProvider {
   public async classifyIntent(prompt: string): Promise<IntentClassification> {
     const lower = prompt.toLowerCase().trim();
 
+    // Kinetic Computer Use & Desktop OS Automation Intent
+    if (
+      lower.startsWith('open ') ||
+      lower.startsWith('try and open ') ||
+      lower.startsWith('launch ') ||
+      lower.startsWith('start ') ||
+      lower.includes('open notepad') ||
+      lower.includes('open calculator') ||
+      lower.includes('open calc') ||
+      lower.includes('open chrome') ||
+      lower.includes('open vs code') ||
+      lower.includes('open vscode') ||
+      lower.includes('open explorer') ||
+      lower.includes('open files') ||
+      lower.includes('open terminal') ||
+      lower.includes('open powershell') ||
+      lower.includes('open cmd') ||
+      lower.includes('open paint') ||
+      lower.includes('open task manager') ||
+      lower.startsWith('type ') ||
+      lower.startsWith('write ') ||
+      lower.startsWith('click ') ||
+      lower.startsWith('press ') ||
+      lower.startsWith('scroll ') ||
+      lower.includes('move cursor') ||
+      lower.includes('move mouse') ||
+      lower.includes('close window') ||
+      lower.includes('close app') ||
+      lower.includes('close notepad')
+    ) {
+      return {
+        intent: 'AUTOMATION',
+        confidence: 0.99,
+        suggestedTools: ['computer.natural_language_command'],
+        fastPathMatch: {
+          toolId: 'computer.natural_language_command',
+          args: { command: prompt }
+        }
+      };
+    }
+
     if (lower.includes('cpu') || lower.includes('ram') || lower.includes('memory') || lower.includes('system') || lower.includes('disk') || lower.includes('network') || lower.includes('time')) {
       return {
         intent: 'SYSTEM_QUERY',
@@ -188,6 +229,18 @@ export abstract class BaseCloudProviderAdapter implements IAIProvider {
 
   public async plan(prompt: string, availableTools: string[]): Promise<AIPlan> {
     const classification = await this.classifyIntent(prompt);
+    if (classification.fastPathMatch) {
+      return {
+        goal: `Process: "${prompt}"`,
+        steps: [{
+          stepNumber: 1,
+          actionDescription: `Execute ${classification.fastPathMatch.toolId}`,
+          toolToCall: classification.fastPathMatch.toolId,
+          toolArguments: classification.fastPathMatch.args || {}
+        }]
+      };
+    }
+
     const steps = (classification.suggestedTools || []).map((toolId, i) => ({
       stepNumber: i + 1,
       actionDescription: `Execute tool ${toolId}`,
