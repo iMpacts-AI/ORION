@@ -13,7 +13,9 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "install:cli": "node bin/install-cli.js",
-    "setup:cli": "node bin/install-cli.js"
+    "setup:cli": "node bin/install-cli.js",
+    "package": "node node_modules/electron-builder/cli.js --dir",
+    "dist:portable": "node node_modules/electron-builder/cli.js --win portable"
   },
   "build": {
     "appId": "com.orion.assistant",

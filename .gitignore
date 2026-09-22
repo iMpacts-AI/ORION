@@ -23,6 +23,7 @@ node_modules/
 # Builds
 dist
 dist-electron
+release/
 
 # Environment variables
 .env

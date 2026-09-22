@@ -153,18 +153,30 @@ ORION is engineered and benchmarked on a dedicated high-performance local AI wor
 
 ---
 
-## 8. Quickstart & Global CLI Installation
+## 8. Download & Global CLI Installation
 
-### Prerequisites
-* **Operating System**: Windows 10/11 (x64)
-* **Node.js**: v18.0.0 or higher (v22 recommended)
-* **Package Manager**: npm v9+
-
-### Instant Setup (Global Command Line)
-You can register ORION as a permanent global system command — just like `agy`, `code`, or `cursor`:
+### Method 1: The 1-Line Universal Installer (Any Windows PC)
+Anyone on any Windows machine can open PowerShell and paste this single command to download, build, and register ORION globally:
 
 ```powershell
-# 1. Clone or extract the repository
+irm https://raw.githubusercontent.com/iMpacts-AI/ORION/main/install.ps1 | iex
+```
+*Automatically downloads the repository, installs dependencies, builds bundles, registers the global `orion` command, and creates an `ORION.lnk` desktop shortcut.*
+
+---
+
+### Method 2: Direct Browser Download (No Git Required)
+If you prefer not to use Git:
+1. **Download the Source ZIP:** [Click here to download ORION (ZIP)](https://github.com/iMpacts-AI/ORION/archive/refs/heads/main.zip)
+2. Extract the archive to any folder on your computer.
+3. Double-click [`install-cli.bat`](file:///C:/Users/PRECISION-ULTRA-RTX/Downloads/ORION/install-cli.bat) inside the folder.
+4. Type `orion` from any terminal or click the created desktop shortcut!
+
+---
+
+### Method 3: Standard Git & Developer Setup
+```powershell
+# 1. Clone the repository
 git clone https://github.com/iMpacts-AI/ORION.git
 cd ORION
 
