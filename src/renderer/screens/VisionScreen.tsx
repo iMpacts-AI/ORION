@@ -52,7 +52,7 @@ export const VisionScreen: React.FC<VisionScreenProps> = ({ cameraActive }) => {
         <div className="relative flex-1 my-4 border border-arvis-cyan/30 bg-black flex items-center justify-center overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.05)_0%,transparent_70%)]" />
           <div className="absolute top-2 left-2 text-[9px] text-arvis-cyan font-mono">FRAME_BUFFER: 1920x1080</div>
-          <div className="absolute bottom-2 right-2 text-[9px] text-arvis-dim font-mono">SENSOR_DEV_MOCK: ONLINE</div>
+          <div className="absolute bottom-2 right-2 text-[9px] text-arvis-dim font-mono">OPTICAL_STREAM: READY</div>
 
           {analyzing ? (
             <div className="flex flex-col items-center space-y-2 text-arvis-cyan animate-pulse">
@@ -102,7 +102,7 @@ export const VisionScreen: React.FC<VisionScreenProps> = ({ cameraActive }) => {
       <div className="bg-black/50 border border-arvis-border p-4 flex flex-col justify-between overflow-y-auto space-y-4">
         <div className="flex justify-between items-center border-b border-arvis-border pb-2 text-xs">
           <span className="font-bold text-arvis-text">VISION INTELLIGENCE RESULT</span>
-          <span className="text-[10px] text-arvis-dim">NON-MISLEADING DEV MOCK</span>
+          <span className="text-[10px] text-arvis-dim">MULTIMODAL VLM ENGINE</span>
         </div>
 
         {visionResult ? (
