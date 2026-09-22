@@ -14,80 +14,146 @@ export const WorldGlobe: React.FC<WorldGlobeProps> = ({ assistantState }) => {
     if (!container) return;
 
     const width = container.clientWidth || 600;
-    const height = container.clientHeight || 500;
+    const height = container.clientHeight || 450;
 
     // Scene, Camera, Renderer
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.z = 18;
+    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000);
+    camera.position.z = 22;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
-    // Inner Wireframe Wire Sphere
-    const innerGeo = new THREE.IcosahedronGeometry(6, 4);
-    const innerMat = new THREE.MeshBasicMaterial({
-      color: 0x00f0ff,
+    // Group for the entire ORION emblem assembly
+    const emblemGroup = new THREE.Group();
+    scene.add(emblemGroup);
+
+    // 1. Core Planetary Torus ("O")
+    const torusGeo = new THREE.TorusGeometry(5.2, 1.4, 32, 120);
+    const torusMat = new THREE.MeshStandardMaterial({
+      color: 0x3b82f6,
+      emissive: 0x1e3a8a,
+      emissiveIntensity: 0.45,
+      roughness: 0.25,
+      metalness: 0.85,
+      wireframe: false
+    });
+    const mainTorus = new THREE.Mesh(torusGeo, torusMat);
+    emblemGroup.add(mainTorus);
+
+    // Inner wireframe lattice for high-tech holographic texture
+    const wireTorusGeo = new THREE.TorusGeometry(5.22, 1.42, 16, 60);
+    const wireTorusMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
       wireframe: true,
-      transparent: true,
-      opacity: 0.15
-    });
-    const innerSphere = new THREE.Mesh(innerGeo, innerMat);
-    scene.add(innerSphere);
-
-    // Outer Technological Orbiting Rings
-    const ring1Geo = new THREE.TorusGeometry(8.5, 0.04, 16, 100);
-    const ring1Mat = new THREE.MeshBasicMaterial({ color: 0xff2a5f, transparent: true, opacity: 0.6 });
-    const ring1 = new THREE.Mesh(ring1Geo, ring1Mat);
-    ring1.rotation.x = Math.PI / 3;
-    scene.add(ring1);
-
-    const ring2Geo = new THREE.TorusGeometry(10.2, 0.03, 16, 100);
-    const ring2Mat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.4 });
-    const ring2 = new THREE.Mesh(ring2Geo, ring2Mat);
-    ring2.rotation.y = Math.PI / 4;
-    scene.add(ring2);
-
-    // Dynamic Futuristic Dot Cloud Globe
-    const particleCount = 1800;
-    const positions = new Float32Array(particleCount * 3);
-    const radius = 6.2;
-
-    for (let i = 0; i < particleCount; i++) {
-      const phi = Math.acos(-1 + (2 * i) / particleCount);
-      const theta = Math.sqrt(particleCount * Math.PI) * phi;
-
-      positions[i * 3] = radius * Math.cos(theta) * Math.sin(phi);
-      positions[i * 3 + 1] = radius * Math.sin(theta) * Math.sin(phi);
-      positions[i * 3 + 2] = radius * Math.cos(phi);
-    }
-
-    const particleGeo = new THREE.BufferGeometry();
-    particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-    const particleMat = new THREE.PointsMaterial({
-      color: 0x00f0ff,
-      size: 0.12,
-      transparent: true,
-      opacity: 0.8
-    });
-
-    const particleCloud = new THREE.Points(particleGeo, particleMat);
-    scene.add(particleCloud);
-
-    // Ambient Pulsing Core Node
-    const coreGeo = new THREE.SphereGeometry(2.5, 32, 32);
-    const coreMat = new THREE.MeshBasicMaterial({
-      color: 0xff2a5f,
       transparent: true,
       opacity: 0.25
     });
-    const coreNode = new THREE.Mesh(coreGeo, coreMat);
-    scene.add(coreNode);
+    const wireTorus = new THREE.Mesh(wireTorusGeo, wireTorusMat);
+    emblemGroup.add(wireTorus);
 
-    // Animation Loop
+    // 2. Tilted Sweeping Orbital Ring (Torus with thin tube)
+    const ringGeo = new THREE.TorusGeometry(8.2, 0.12, 16, 160);
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: 0x8b5cf6,
+      emissive: 0x38bdf8,
+      emissiveIntensity: 0.8,
+      roughness: 0.1,
+      metalness: 0.95
+    });
+    const orbitalRing = new THREE.Mesh(ringGeo, ringMat);
+    orbitalRing.rotation.x = Math.PI / 2.7;
+    orbitalRing.rotation.y = -Math.PI / 6;
+    emblemGroup.add(orbitalRing);
+
+    // Outer faint secondary energy ring
+    const outerRingGeo = new THREE.TorusGeometry(9.6, 0.04, 12, 140);
+    const outerRingMat = new THREE.MeshBasicMaterial({
+      color: 0x60a5fa,
+      transparent: true,
+      opacity: 0.35
+    });
+    const outerRing = new THREE.Mesh(outerRingGeo, outerRingMat);
+    outerRing.rotation.x = Math.PI / 2.5;
+    outerRing.rotation.y = -Math.PI / 5;
+    emblemGroup.add(outerRing);
+
+    // 3. 4-Point Celestial Star Flare at Top-Right (Intersection vertex)
+    const starGroup = new THREE.Group();
+    starGroup.position.set(5.8, 4.2, 2.5);
+
+    const starShape = new THREE.Shape();
+    const starR1 = 1.6;
+    const starR2 = 0.25;
+    for (let i = 0; i < 8; i++) {
+      const radius = i % 2 === 0 ? starR1 : starR2;
+      const angle = (i * Math.PI) / 4;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      if (i === 0) starShape.moveTo(x, y);
+      else starShape.lineTo(x, y);
+    }
+    starShape.closePath();
+
+    const starGeo = new THREE.ShapeGeometry(starShape);
+    const starMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.95
+    });
+    const starMesh = new THREE.Mesh(starGeo, starMat);
+    starGroup.add(starMesh);
+    emblemGroup.add(starGroup);
+
+    // 4. Ambient & Directional Space Lighting
+    const ambientLight = new THREE.AmbientLight(0x0f172a, 1.2);
+    scene.add(ambientLight);
+
+    const blueLight = new THREE.PointLight(0x38bdf8, 3.5, 40);
+    blueLight.position.set(-10, 8, 12);
+    scene.add(blueLight);
+
+    const violetLight = new THREE.PointLight(0x8b5cf6, 4.0, 40);
+    violetLight.position.set(12, -8, 10);
+    scene.add(violetLight);
+
+    const starGlowLight = new THREE.PointLight(0xffffff, 2.0, 15);
+    starGlowLight.position.copy(starGroup.position);
+    scene.add(starGlowLight);
+
+    // 5. Deep Space Particle Field (1,500 Stars)
+    const starCount = 1500;
+    const starCoords = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount * 3; i += 3) {
+      starCoords[i] = (Math.random() - 0.5) * 60;
+      starCoords[i + 1] = (Math.random() - 0.5) * 45;
+      starCoords[i + 2] = (Math.random() - 0.5) * 30 - 5;
+    }
+    const starFieldGeo = new THREE.BufferGeometry();
+    starFieldGeo.setAttribute('position', new THREE.BufferAttribute(starCoords, 3));
+    const starFieldMat = new THREE.PointsMaterial({
+      color: 0xbae6fd,
+      size: 0.12,
+      transparent: true,
+      opacity: 0.65
+    });
+    const starPoints = new THREE.Points(starFieldGeo, starFieldMat);
+    scene.add(starPoints);
+
+    // Mouse Tracking for Smooth Parallax Tilt
+    let mouseX = 0;
+    let mouseY = 0;
+    const handleMouseMove = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      mouseX = ((e.clientX - rect.left) / width - 0.5) * 2;
+      mouseY = ((e.clientY - rect.top) / height - 0.5) * 2;
+    };
+    container.addEventListener('mousemove', handleMouseMove);
+
+    // Animation Render Loop
     let animationFrameId: number;
     let clock = new THREE.Clock();
 
@@ -95,104 +161,88 @@ export const WorldGlobe: React.FC<WorldGlobeProps> = ({ assistantState }) => {
       animationFrameId = requestAnimationFrame(animate);
       const elapsedTime = clock.getElapsedTime();
 
-      // State-responsive speeds and dynamics
-      let speedMultiplier = 1;
+      // Rotation dynamics based on state
+      const speedMultiplier =
+        assistantState === 'THINKING' ? 3.0 :
+        assistantState === 'EXECUTING' ? 2.2 :
+        assistantState === 'LISTENING' ? 1.5 : 0.8;
+
+      mainTorus.rotation.z = elapsedTime * 0.15 * speedMultiplier;
+      wireTorus.rotation.z = -elapsedTime * 0.12 * speedMultiplier;
+      orbitalRing.rotation.z = elapsedTime * 0.3 * speedMultiplier;
+      outerRing.rotation.z = -elapsedTime * 0.2 * speedMultiplier;
+
+      // Star flare twinkle
+      const starScale = 1.0 + 0.25 * Math.sin(elapsedTime * 5.0);
+      starGroup.scale.set(starScale, starScale, starScale);
+
+      // Smooth Parallax towards mouse position
+      emblemGroup.rotation.y += (mouseX * 0.35 - emblemGroup.rotation.y) * 0.05;
+      emblemGroup.rotation.x += (-mouseY * 0.35 - emblemGroup.rotation.x) * 0.05;
+
+      // Color/Glow Shifts based on state
       if (assistantState === 'THINKING') {
-        speedMultiplier = 2.5;
-        particleMat.color.setHex(0xff2a5f);
-        coreMat.color.setHex(0xff2a5f);
+        torusMat.emissive.setHex(0x0284c7);
+        ringMat.emissive.setHex(0x38bdf8);
       } else if (assistantState === 'EXECUTING') {
-        speedMultiplier = 2.0;
-        particleMat.color.setHex(0x00f0ff);
-        coreMat.color.setHex(0x00f0ff);
-      } else if (assistantState === 'LISTENING') {
-        speedMultiplier = 1.4;
-        particleMat.color.setHex(0xffb703);
-        coreMat.color.setHex(0xffb703);
-      } else if (assistantState === 'VISION') {
-        speedMultiplier = 1.8;
-        particleMat.color.setHex(0x00f0ff);
-      } else if (assistantState === 'ERROR') {
-        speedMultiplier = 0.5;
-        particleMat.color.setHex(0xff0000);
-        coreMat.color.setHex(0xff0000);
+        torusMat.emissive.setHex(0x7c3aed);
+        ringMat.emissive.setHex(0xc084fc);
+      } else if (assistantState === 'SPEAKING') {
+        torusMat.emissive.setHex(0x059669);
+        ringMat.emissive.setHex(0x34d399);
       } else {
-        speedMultiplier = 1.0;
-        particleMat.color.setHex(0x00f0ff);
-        coreMat.color.setHex(0xff2a5f);
+        torusMat.emissive.setHex(0x1e3a8a);
+        ringMat.emissive.setHex(0x8b5cf6);
       }
-
-      particleCloud.rotation.y = elapsedTime * 0.12 * speedMultiplier;
-      innerSphere.rotation.y = -elapsedTime * 0.08 * speedMultiplier;
-      ring1.rotation.z = elapsedTime * 0.15 * speedMultiplier;
-      ring2.rotation.x = elapsedTime * 0.1 * speedMultiplier;
-
-      // Pulse core scale
-      const scale = 1 + Math.sin(elapsedTime * 3) * 0.15;
-      coreNode.scale.set(scale, scale, scale);
 
       renderer.render(scene, camera);
     };
 
     animate();
 
+    // Resize handler
     const handleResize = () => {
       if (!container) return;
-      const w = container.clientWidth;
-      const h = container.clientHeight;
+      const w = container.clientWidth || 600;
+      const h = container.clientHeight || 450;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
-
     window.addEventListener('resize', handleResize);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationFrameId);
-      if (container && renderer.domElement) {
+      window.removeEventListener('resize', handleResize);
+      container.removeEventListener('mousemove', handleMouseMove);
+      renderer.dispose();
+      if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }
-      particleGeo.dispose();
-      particleMat.dispose();
-      innerGeo.dispose();
-      innerMat.dispose();
-      ring1Geo.dispose();
-      ring1Mat.dispose();
-      ring2Geo.dispose();
-      ring2Mat.dispose();
-      coreGeo.dispose();
-      coreMat.dispose();
-      renderer.dispose();
     };
   }, [assistantState]);
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center">
-      <div ref={mountRef} className="w-full h-full max-w-[650px] max-h-[550px]" />
-      
-      {/* Visual Overlay Tech Elements */}
-      <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-6">
-        <div className="flex justify-between items-start text-[10px] text-arvis-dim font-mono tracking-widest uppercase">
-          <div className="border-l-2 border-arvis-accent pl-2">
-            GLOBAL_TELEMETRY // SPHERE_NODE_01<br />
-            LAT: 25.2048° N | LON: 55.2708° E
-          </div>
-          <div className="text-right border-r-2 border-arvis-cyan pr-2">
-            GRID_RESOL: 1800_NODES<br />
-            ORBIT_VEL: 0.12_RAD/S
-          </div>
-        </div>
+    <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden">
+      {/* 3D WebGL Canvas Mount */}
+      <div ref={mountRef} className="w-full flex-1 min-h-[300px] flex items-center justify-center cursor-pointer" />
 
-        <div className="flex justify-between items-end text-[10px] text-arvis-dim font-mono tracking-widest uppercase">
-          <div>
-            PROJECTION: THREE_SPHERICAL<br />
-            MOD_STATUS: OK_NOMINAL
-          </div>
-          <div className="text-right">
-            SEC_CHANNEL: ENCRYPTED<br />
-            PRIVACY: CONFIRMED
-          </div>
+      {/* Atmospheric Horizon Curved Glow (matching bottom of logo kit example) */}
+      <div className="absolute bottom-0 left-0 right-0 h-28 pointer-events-none overflow-hidden">
+        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 w-[120%] h-36 rounded-[100%] bg-gradient-to-t from-blue-600/30 via-indigo-600/15 to-transparent blur-xl" />
+        <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-cyan-400/80 to-transparent" />
+      </div>
+
+      {/* Official Typography from Brand Kit */}
+      <div className="absolute bottom-3 flex flex-col items-center select-none pointer-events-none z-10">
+        <h1 className="text-2xl font-black tracking-[0.3em] text-white font-sans drop-shadow-[0_0_20px_rgba(59,130,246,0.8)]">
+          ORION
+        </h1>
+        <div className="text-[10px] font-mono tracking-[0.25em] text-cyan-300 font-semibold uppercase mt-0.5">
+          COMMAND • ASSIST • CREATE
+        </div>
+        <div className="text-[9px] font-mono tracking-[0.2em] text-slate-400 mt-0.5">
+          YOUR AI. YOUR COMPUTER. YOUR WORLD.
         </div>
       </div>
     </div>

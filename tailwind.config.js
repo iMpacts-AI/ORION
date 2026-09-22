@@ -8,30 +8,34 @@ module.exports = {
     extend: {
       colors: {
         orion: {
-          bg: "#050608",
-          card: "rgba(10, 14, 20, 0.75)",
-          border: "rgba(255, 255, 255, 0.12)",
-          "border-bright": "rgba(255, 255, 255, 0.25)",
-          accent: "#ff2a5f",
-          "accent-glow": "rgba(255, 42, 95, 0.35)",
-          cyan: "#00f0ff",
-          cyanGlow: "rgba(0, 240, 255, 0.25)",
-          text: "#e1e7ec",
-          dim: "#6b7d8d",
-          amber: "#ffb703"
+          bg: "#0B0F1A", // DEEP SPACE
+          deep: "#070A13",
+          card: "rgba(11, 15, 26, 0.82)",
+          border: "rgba(59, 130, 246, 0.22)",
+          "border-bright": "rgba(139, 92, 246, 0.45)",
+          primary: "#3B82F6", // ORION BLUE
+          accent: "#8B5CF6", // ORION VIOLET
+          "accent-glow": "rgba(139, 92, 246, 0.45)",
+          cyan: "#38BDF8", // ELECTRIC CYAN
+          cyanGlow: "rgba(56, 189, 248, 0.35)",
+          blueGlow: "rgba(59, 130, 246, 0.45)",
+          text: "#FFFFFF", // STAR WHITE
+          dim: "#94A3B8",
+          amber: "#F59E0B"
         },
         arvis: {
-          bg: "#050608",
-          card: "rgba(10, 14, 20, 0.75)",
-          border: "rgba(255, 255, 255, 0.12)",
-          "border-bright": "rgba(255, 255, 255, 0.25)",
-          accent: "#ff2a5f",
-          "accent-glow": "rgba(255, 42, 95, 0.35)",
-          cyan: "#00f0ff",
-          cyanGlow: "rgba(0, 240, 255, 0.25)",
-          text: "#e1e7ec",
-          dim: "#6b7d8d",
-          amber: "#ffb703"
+          bg: "#0B0F1A",
+          deep: "#070A13",
+          card: "rgba(11, 15, 26, 0.82)",
+          border: "rgba(59, 130, 246, 0.22)",
+          "border-bright": "rgba(139, 92, 246, 0.45)",
+          accent: "#8B5CF6",
+          "accent-glow": "rgba(139, 92, 246, 0.45)",
+          cyan: "#38BDF8",
+          cyanGlow: "rgba(56, 189, 248, 0.35)",
+          text: "#FFFFFF",
+          dim: "#94A3B8",
+          amber: "#F59E0B"
         }
       },
       fontFamily: {

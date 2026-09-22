@@ -2,26 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 @layer base {
   body {
-    @apply bg-[#050608] text-[#e1e7ec] overflow-hidden select-none font-mono antialiased;
+    @apply bg-[#0B0F1A] text-white overflow-hidden select-none font-mono antialiased;
+    background-image: 
+      radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.15), transparent 45%),
+      radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.12), transparent 40%),
+      radial-gradient(circle at 0% 100%, rgba(56, 189, 248, 0.08), transparent 35%);
   }
 }
 
-/* Custom Futuristic HUD Styling & Micro-animations */
+/* Custom Official ORION HUD Styling & Micro-animations */
 .hud-border {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  box-shadow: inset 0 0 20px rgba(7, 10, 19, 0.85);
 }
 
 .hud-border-accent {
-  border: 1px solid rgba(255, 42, 95, 0.4);
-  box-shadow: 0 0 12px rgba(255, 42, 95, 0.2), inset 0 0 10px rgba(255, 42, 95, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.35), inset 0 0 12px rgba(139, 92, 246, 0.15);
 }
 
 .hud-border-cyan {
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.15), inset 0 0 8px rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.25), inset 0 0 10px rgba(56, 189, 248, 0.1);
+}
+
+.hud-border-blue {
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.3), inset 0 0 10px rgba(59, 130, 246, 0.1);
 }
 
 .hud-corner-tl {
@@ -32,10 +45,10 @@
   position: absolute;
   top: -1px;
   left: -1px;
-  width: 8px;
-  height: 8px;
-  border-top: 2px solid rgba(255, 42, 95, 0.8);
-  border-left: 2px solid rgba(255, 42, 95, 0.8);
+  width: 10px;
+  height: 10px;
+  border-top: 2px solid #38BDF8;
+  border-left: 2px solid #38BDF8;
 }
 
 .hud-corner-br {
@@ -46,21 +59,22 @@
   position: absolute;
   bottom: -1px;
   right: -1px;
-  width: 8px;
-  height: 8px;
-  border-bottom: 2px solid rgba(255, 42, 95, 0.8);
-  border-right: 2px solid rgba(255, 42, 95, 0.8);
+  width: 10px;
+  height: 10px;
+  border-bottom: 2px solid #8B5CF6;
+  border-right: 2px solid #8B5CF6;
 }
 
-.scanline-overlay {
-  background: linear-gradient(
-    to bottom,
-    rgba(255,255,255,0),
-    rgba(255,255,255,0) 50%,
-    rgba(0, 0, 0, 0.3) 50%,
-    rgba(0, 0, 0, 0.3)
-  );
-  background-size: 100% 4px;
+.orion-glass {
+  background: rgba(11, 15, 26, 0.78);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.orion-glass-active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(139, 92, 246, 0.2));
+  border: 1px solid rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.35);
 }
 
 /* Custom Scrollbar for Modular HUD Panels */
@@ -70,14 +84,14 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(5, 6, 8, 0.8);
+  background: rgba(11, 15, 26, 0.95);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 42, 95, 0.3);
+  background: rgba(59, 130, 246, 0.35);
   border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 42, 95, 0.6);
+  background: rgba(139, 92, 246, 0.7);
 }

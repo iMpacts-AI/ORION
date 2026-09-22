@@ -178,10 +178,10 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="w-screen h-screen flex flex-col justify-between bg-[#050608] text-[#e1e7ec] overflow-hidden select-none font-mono relative">
+    <div className="w-screen h-screen flex flex-col justify-between bg-[#0B0F1A] text-white overflow-hidden select-none font-mono relative">
       
       {/* Scanline Visual Overlay */}
-      <div className="absolute inset-0 pointer-events-none scanline-overlay z-50 opacity-30" />
+      <div className="absolute inset-0 pointer-events-none scanline-overlay z-50 opacity-20" />
 
       {/* Top Header Navigation */}
       <HeaderNav
@@ -206,13 +206,13 @@ export const App: React.FC = () => {
       </div>
 
       {/* Bottom Command Bar */}
-      <div className="p-3 bg-arvis-card border-t border-arvis-border flex items-center space-x-3 z-40">
+      <div className="p-3 bg-[#0B0F1A]/90 border-t border-blue-500/20 backdrop-blur-md flex items-center space-x-3 z-40">
         <button
           onClick={toggleMic}
-          className={`p-2 border transition-all ${
+          className={`p-2.5 rounded-lg border transition-all ${
             privacy.micActive
-              ? 'border-arvis-amber bg-arvis-amber/20 text-arvis-amber animate-pulse'
-              : 'border-arvis-border text-arvis-dim hover:text-arvis-text'
+              ? 'border-amber-400 bg-amber-400/20 text-amber-300 animate-pulse shadow-lg shadow-amber-500/30'
+              : 'border-blue-500/30 bg-[#070A13]/60 text-slate-400 hover:text-cyan-300 hover:border-cyan-400/40'
           }`}
           title="Toggle Microphone Voice Command"
         >
@@ -225,13 +225,14 @@ export const App: React.FC = () => {
             placeholder="Type or speak command (e.g., 'ORION, show system' or 'ORION, what's my CPU usage?')..."
             value={userInput}
             onChange={(e) => setUserInput(e.target.value)}
-            className="w-full bg-black/60 border border-arvis-border p-2 px-3 text-xs text-arvis-cyan placeholder:text-arvis-dim focus:border-arvis-cyan outline-none"
+            className="w-full bg-[#070A13]/80 border border-blue-500/30 rounded-lg p-2.5 px-4 text-xs text-cyan-300 placeholder:text-slate-500 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30 outline-none transition-all"
           />
           <button
             type="submit"
-            className="p-2 bg-arvis-cyan/20 border border-arvis-cyan text-arvis-cyan hover:bg-arvis-cyan/30 text-xs font-bold transition-all flex items-center space-x-1"
+            className="p-2.5 px-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-blue-500/20 flex items-center space-x-1.5"
           >
-            <Send className="w-4 h-4" />
+            <span>SEND</span>
+            <Send className="w-3.5 h-3.5" />
           </button>
         </form>
       </div>
