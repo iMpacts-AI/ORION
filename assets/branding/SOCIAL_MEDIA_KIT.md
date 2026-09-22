@@ -9,19 +9,21 @@
 
 | Element | Specification |
 | :--- | :--- |
-| **Brand Name** | **iMpact** (Stylized with lowercase 'i' and capital 'M') |
-| **Flagship Technology** | **ORION** — Autonomous Permission-Based Desktop AI Computer-Use Agent |
+| **Brand Name** | **iMpact** (Company) · **ORION** (Flagship Desktop AI Agent) |
+| **Official Tagline** | **SEE / THINK / ACT** (Sub-tagline: *Intelligence Meets Action*) |
+| **Logo Emblem** | `( ✦ )` Central 4-point star (*Intelligence/Core*) flanked by dual crescent brackets (*Connection between apps & tools*) |
 | **Core Philosophy** | *"Ideas are ideas. Implementation is the real deal."* |
 | **Official Website** | [https://impacts-ai.com](https://impacts-ai.com) (Product: [https://impacts-ai.com/orion](https://impacts-ai.com/orion)) |
-| **Brand Colors** | Deep Space Black (`#050811`), Electric Cyan (`#00F0FF`), Plasma Blue (`#0077FE`), Clean White (`#FFFFFF`) |
+| **Brand Colors** | **Deep Black** (`#0B0F14`), **ORION White** (`#FFFFFF`), **ORION Blue** (`#3882F6`), **ORION Purple** (`#805CF6`), **Fog Gray** (`#9CA3AF`) |
+| **Typography** | **ORION** (Custom Wide Geometric Sans) · **Inter** (Interface & Body Text) |
 
-### Generated Brand Assets
+### Brand & Video Ad Assets
 
-**Square Profile Avatar (YouTube, LinkedIn, TikTok):**  
-![iMpact Profile Avatar](./impact_avatar_logo.jpg)
-
-**16:9 Banner (YouTube Banner & LinkedIn Header):**  
-![iMpact Social Banner](./impact_social_banner.jpg)
+* **Official Logo Kit:** [`assets/branding/orion_logo_kit.png`](./orion_logo_kit.png)
+* **YouTube 16:9 Ad Thumbnail Cover:** [`assets/branding/video_ad_thumbnail_16x9.jpg`](./video_ad_thumbnail_16x9.jpg)
+* **Reels / Shorts 9:16 Ad Cover:** [`assets/branding/video_ad_cover_9x16.jpg`](./video_ad_cover_9x16.jpg)
+* **Square Profile Avatar (YouTube, LinkedIn, TikTok):** [`assets/branding/impact_avatar_logo.jpg`](./impact_avatar_logo.jpg)
+* **16:9 Banner (YouTube & LinkedIn Header):** [`assets/branding/impact_social_banner.jpg`](./impact_social_banner.jpg)
 
 ---
 

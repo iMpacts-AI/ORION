@@ -11,6 +11,7 @@
 
 | Asset | Format | Resolution | Location | Intended Use |
 |:---|:---:|:---:|:---|:---|
+| **Official ORION Logo Kit** | Master Spec | 1536×1024 | `assets/branding/orion_logo_kit.png` | Official emblem `( ✦ )`, wordmark, app icons, color codes & typography |
 | **YouTube Tech Preroll Cover** | 16:9 Landscape | 1920×1080 | `assets/branding/video_ad_thumbnail_16x9.jpg` | YouTube video thumbnail, video intro card, LinkedIn landscape ad |
 | **Mobile Reels & Shorts Cover** | 9:16 Vertical | 1080×1920 | `assets/branding/video_ad_cover_9x16.jpg` | Instagram Reels cover, TikTok thumbnail, YouTube Shorts splash |
 | **Official Brand Avatar** | 1:1 Square | 1024×1024 | `assets/branding/impact_avatar_logo.jpg` | Channel avatar, ad sponsor icon, end-card logo bug |
