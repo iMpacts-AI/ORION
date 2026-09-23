@@ -10,8 +10,10 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7.2-blue.svg)](tsconfig.json)
 [![Electron](https://img.shields.io/badge/Electron-33.2.1-47848F.svg)](package.json)
 [![React](https://img.shields.io/badge/React-18.3.1-61DAFB.svg)](package.json)
+[![Kinetic OS](https://img.shields.io/badge/Kinetic%20OS-Sub--25ms%20Win32-emerald.svg)](src/main/platform/win32-native-input.cs)
 [![Security](https://img.shields.io/badge/Security-Context%20Isolated-success.svg)](docs/security/security.md)
 [![Parent Organization](https://img.shields.io/badge/Organization-iMpact%20AI-00f0ff.svg)](https://github.com/iMpacts-AI/iMpact)
+[![Research: Open Systems](https://img.shields.io/badge/Research-Autonomous%20Agents-blueviolet.svg)]()
 
 > **"YOUR AI. YOUR COMPUTER. YOUR WORLD."**  
 > *ORION is the flagship autonomous desktop AI operating system developed by [iMpact AI](https://github.com/iMpacts-AI/iMpact). Operating with native Win32 kinetic input drivers, real-time hardware telemetry, closed-loop Observe-Plan-Act-Verify automation, and strict deterministic safety gates.*
@@ -201,7 +203,7 @@ Once registered, you can launch ORION directly from **ANY** Command Prompt, Powe
 # Launch ORION desktop interface immediately
 orion
 
-# Launch directly into Coders HQ Showcase & Demonstration mode
+# Launch directly into Empirical Showcase & Demonstration mode
 orion demo
 
 # Launch with live hot-reloading (Vite dev server + Electron)
@@ -222,15 +224,16 @@ orion --help
 
 ---
 
-## 9. Coders HQ Live Demonstration & Showcase Mode
+## 9. Empirical Verification & Interactive Showcase Mode
 
-ORION includes a dedicated, deterministic **Demo & Showcase Controller** accessible directly via the top navigation bar (`[DEMO]` tab) or by typing `orion demo`:
+ORION includes a dedicated, deterministic **Interactive Showcase & Verification Controller** accessible directly via the top navigation bar (`[DEMO]` tab) or by typing `orion demo`:
 
 1. **Basic Intelligence & Machine Overview**: Natural language query (`"ORION, give me a quick overview of this machine."`) decomposing into a concurrent 3-step DAG plan (`system.get_info`, `system.get_cpu_usage`, `system.get_memory_usage`).
 2. **Safe Tool Execution & Telemetry**: Native hardware sensor polling in single-digit milliseconds with execution IDs, durations, and core loads.
 3. **Safety Boundary & Permission Enforcement**: Deterministic risk evaluation blocking unauthorized writes to protected Windows system paths (`C:\Windows\System32`).
 4. **Visual Perception & Display Stream**: Native 1920×1080 desktop frame buffer capture via Electron `desktopCapturer`.
 5. **Failure Recovery & Autonomous Replanning**: Graceful handling of missing files, autonomous replanning recovery, and zero-crash stabilization.
+6. **Sub-25ms Kinetic OS Control**: Real-time cursor navigation and keyboard input actuation directly controlling native Windows applications without simulation.
 
 ```powershell
 # Instant Showcase Launch:
@@ -274,8 +277,9 @@ ALL 43 TEST SUITES PASSED IN PURE PROCESS ISOLATION!
 *For complete test traces and build outputs, see [docs/testing/testing.md](docs/testing/testing.md).*
 
 ---
-
-## 10. Documentation Directory
+---
+ 
+## 11. Technical Documentation Index
 
 Comprehensive, evidence-based technical documentation is organized in `docs/`:
 
@@ -286,7 +290,7 @@ Comprehensive, evidence-based technical documentation is organized in `docs/`:
 * **[Tool System Specification](docs/tools/tools.md)** — Parameter schemas, permission tiers, precondition/postcondition validation.
 * **[Visual Perception Engine](docs/vision/vision.md)** — Screen capture pipeline, UI Automation grounding, and latency metrics.
 * **[Security & Governance Model](docs/security/security.md)** — Threat model, credential quarantine, and Emergency Stop mechanics.
-* **[Test Verification Report](docs/testing/testing.md)** — Automated test runner, 40 passing suites, and live API loop evidence.
+* **[Test Verification Report](docs/testing/testing.md)** — Automated test runner, 43 passing suites, and live API loop evidence.
 * **[Architecture Decision Records](docs/decisions/decisions.md)** — 7 foundational ADRs documenting engineering rationale and tradeoffs.
 * **[Product Roadmap](docs/roadmap/roadmap.md)** — 4-horizon evolution plan and the anti-roadmap.
 * **[3-Month Engineering Target](docs/roadmap/three-month-targets.md)** — Concrete monthly milestones for Q4 2026.
@@ -295,7 +299,7 @@ Comprehensive, evidence-based technical documentation is organized in `docs/`:
 
 ---
 
-## 10. Repository Structure
+## 12. Repository Structure
 
 ```
 ORION/
@@ -353,7 +357,7 @@ ORION/
     │   └── services/                   # Orchestrator, AI Router, Tools, Voice, Vision
     │       ├── computer/               # Computer-use planner, executor, input drivers
     │       ├── titan/                  # Video production pipeline & batch orchestrator
-    │       └── __tests__/              # 40 automated test suites
+    │       └── __tests__/              # 43 automated test suites
     ├── renderer/                       # Electron Renderer Process (React 18 + Three.js)
     │   ├── App.tsx                     # Main HUD component
     │   ├── hud/                        # Holographic 3D Globe, Telemetry & Status panels
@@ -363,17 +367,33 @@ ORION/
 
 ---
 
-## 11. About iMpact & Builder Profile
+## 13. Global Research, Academic & Fellowship Mission
 
-**iMpact** is an independent technology initiative founded by **Saqib** (age 13) with the conviction that great software is built through implementation, honest measurement, and relentless iteration.
+ORION is engineered with the ambition of building an unusually strong technical foundation at the intersection of agentic AI, operating systems, and human-computer interaction.
 
-* **Founder:** Saqib (Independent Software Builder)
-* **Philosophy:** *"Ideas are ideas. Implementation is the real deal."*
-* **Ambition:** Building practical, human-centered intelligent systems that respect user privacy, enforce human authority, and solve real computing work.
-* **Website:** [https://impacts-ai.com](https://impacts-ai.com)
+* **Independent Builder Origin:** Conceived, architected, and continuously developed by **Sheikh Saqib**, a young independent builder based in the UAE.
+* **Empirical Integrity:** We do not publish speculative mockups or exaggerate autonomous capabilities. Every feature documented in this repository is backed by passing unit/integration suites and verified system telemetry.
+* **Global Academic & Fellowship Collaboration:** We actively welcome technical dialogue, evaluations, and collaboration with:
+  * Top-tier computer science, AI, and robotics departments worldwide (undergraduate and pre-university research pathways).
+  * Global merit fellowships and builder grants (e.g., Thiel Fellowship, Emergent Ventures, Rise / Schmidt Futures).
+  * Independent AI research institutes, open-source communities, and systems laboratories.
+  * Technical conferences, workshops, and student research symposiums.
 
 ---
 
-## 12. Security & Responsible Disclosure
+## 14. About iMpact & Builder Profile
+
+**iMpact AI** is the parent technology initiative founded by **Sheikh Saqib** focused on intelligent software, autonomous agents, and sovereign desktop systems.
+
+* **Founder:** Sheikh Saqib (Independent Software Builder)
+* **Initiative:** iMpact AI ([https://impacts-ai.com](https://impacts-ai.com))
+* **Organization GitHub:** [https://github.com/iMpacts-AI](https://github.com/iMpacts-AI)
+* **Philosophy:** *"Ideas are ideas. Implementation is the real deal. Measure honestly, build relentlessly, expand human agency."*
+* **Contact:** `contact@impacts-ai.com`
+
+---
+
+## 15. Security & Responsible Disclosure
 
 ORION treats security as a core architectural constraint. If you discover a vulnerability or security flaw, please review our [Security Architecture](docs/security/security.md) and report findings directly to `security@impacts-ai.com` or via [https://impacts-ai.com/contact](https://impacts-ai.com/contact).
+
