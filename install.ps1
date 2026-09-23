@@ -58,14 +58,16 @@ if ($isOrionRepo) {
         New-Item -ItemType Directory -Path $installDir -Force | Out-Null
     }
 
+$ProgressPreference = "SilentlyContinue"
+
     $gitCmd = Get-Command git -ErrorAction SilentlyContinue
     if ($gitCmd) {
-        Write-Host "[+] Cloning latest ORION from GitHub..." -ForegroundColor Cyan
+        Write-Host "[+] Cloning latest ORION from GitHub (shallow fast-clone mode)..." -ForegroundColor Cyan
         if (Test-Path "$installDir\.git") {
             Set-Location $installDir
             git pull origin main
         } else {
-            git clone https://github.com/iMpacts-AI/ORION.git $installDir
+            git clone --depth 1 --single-branch https://github.com/iMpacts-AI/ORION.git $installDir
             Set-Location $installDir
         }
     } else {
@@ -91,13 +93,15 @@ if ($isOrionRepo) {
 Set-Location $installDir
 
 if (-not (Test-Path "node_modules")) {
-    Write-Host "`n[*] Installing project dependencies (npm install)..." -ForegroundColor Cyan
-    npm install
+    Write-Host "`n[*] Installing project dependencies (ultra-fast mode: --no-audit --prefer-offline)..." -ForegroundColor Cyan
+    npm install --prefer-offline --no-audit --no-fund --progress=false
 }
 
 if ((-not (Test-Path "dist\index.html")) -or (-not (Test-Path "dist-electron\main\index.js"))) {
     Write-Host "`n[*] Compiling production bundles (npm run build)..." -ForegroundColor Cyan
     npm run build
+} else {
+    Write-Host "[✓] Pre-compiled production bundles verified. Build step skipped (instant launch ready)." -ForegroundColor Green
 }
 
 # 4. Register Global CLI & Windows PATH
