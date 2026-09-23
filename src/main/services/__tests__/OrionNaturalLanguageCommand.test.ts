@@ -63,6 +63,47 @@ async function runOrionNaturalLanguageCommandTests() {
     );
   }
 
+  // Test 5: Compound Notepad Type and Save Workflow
+  {
+    const plan = await planner.planTask('open notepad, type iMpact AI is the future, and save as notes.txt', { isDryRun: true });
+    const hasHotkeySave = plan.actions.some(a => a.type === 'HOTKEY' && a.parameters?.keys?.includes('control'));
+    const hasFilename = plan.actions.some(a => a.type === 'KEYBOARD_INPUT' && a.parameters?.text === 'notes.txt');
+    assert(
+      plan.actions[0].type === 'OPEN_APP' && hasHotkeySave && hasFilename,
+      'Plans compound open, type, save hotkey, and filename input'
+    );
+  }
+
+  // Test 6: Calculator Math Expression Computation
+  {
+    const plan = await planner.planTask('open calculator and calculate 128 * 4', { isDryRun: true });
+    const hasMathInput = plan.actions.some(a => a.type === 'KEYBOARD_INPUT' && a.parameters?.text === '128*4');
+    assert(
+      plan.actions[0].type === 'OPEN_APP' && hasMathInput,
+      'Plans calculator launch and automated math expression computation'
+    );
+  }
+
+  // Test 7: Direct Browser Navigation to Target URL
+  {
+    const plan = await planner.planTask('open chrome and go to impacts-ai.com', { isDryRun: true });
+    const hasTargetUrl = plan.actions.some(a => a.type === 'KEYBOARD_INPUT' && a.parameters?.text === 'https://impacts-ai.com');
+    assert(
+      plan.actions[0].type === 'OPEN_APP' && hasTargetUrl,
+      'Plans Chrome launch and direct URL navigation for domain target'
+    );
+  }
+
+  // Test 8: Desktop Surface Minimization Toggle
+  {
+    const plan = await planner.planTask('show desktop', { isDryRun: true });
+    const hasWinD = plan.actions.some(a => a.type === 'HOTKEY' && a.parameters?.keys?.includes('win') && a.parameters?.keys?.includes('d'));
+    assert(
+      hasWinD,
+      'Plans Win+D hotkey for show desktop command'
+    );
+  }
+
   if (failed > 0) {
     throw new Error(`OrionNaturalLanguageCommand: ${failed} tests failed`);
   }

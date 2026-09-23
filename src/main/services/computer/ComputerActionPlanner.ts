@@ -154,7 +154,7 @@ Command: "${naturalLanguageCommand}"`;
     }
 
     // 1. Browser & Navigation Commands
-    else if (commandLower.includes('open chrome') || commandLower.includes('search for') || commandLower.includes('open browser')) {
+    else if (commandLower.includes('open chrome') || commandLower.includes('search for') || commandLower.includes('open browser') || commandLower.includes('go to ') || commandLower.includes('visit ')) {
       actions.push({
         id: `act_${Date.now()}_1`,
         type: 'OPEN_APP',
@@ -165,8 +165,24 @@ Command: "${naturalLanguageCommand}"`;
         reason: 'Launch Google Chrome browser'
       });
 
+      const urlMatch = naturalLanguageCommand.match(/(?:go to|visit|navigate to|open)\s+(https?:\/\/[^\s]+|[a-zA-Z0-9\-_]+\.(?:com|org|net|ai|io|ae|edu)[^\s]*)/i);
       const searchMatch = naturalLanguageCommand.match(/search (?:for )?["']?([^"']+)["']?/i);
-      const query = searchMatch ? searchMatch[1].trim() : 'Nvidia earnings';
+      let targetUrl = 'https://www.google.com';
+
+      if (urlMatch) {
+        let raw = urlMatch[1].trim();
+        if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+          raw = 'https://' + raw;
+        }
+        targetUrl = raw;
+      } else if (searchMatch) {
+        targetUrl = `https://www.google.com/search?q=${encodeURIComponent(searchMatch[1].trim())}`;
+      } else {
+        const query = naturalLanguageCommand.replace(/(?:open chrome|open browser|and|search for)\s*/gi, '').trim();
+        if (query) {
+          targetUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+        }
+      }
 
       actions.push({
         id: `act_${Date.now()}_2`,
@@ -180,10 +196,10 @@ Command: "${naturalLanguageCommand}"`;
       actions.push({
         id: `act_${Date.now()}_3`,
         type: 'KEYBOARD_INPUT',
-        parameters: { text: `https://www.google.com/search?q=${encodeURIComponent(query)}` },
+        parameters: { text: targetUrl },
         confidence: 0.95,
         riskLevel: 'MODERATE_RISK',
-        reason: 'Type target query URL'
+        reason: `Type target navigation URL: ${targetUrl}`
       });
 
       actions.push({
@@ -192,7 +208,7 @@ Command: "${naturalLanguageCommand}"`;
         parameters: { key: 'enter' },
         confidence: 0.95,
         riskLevel: 'MODERATE_RISK',
-        reason: 'Submit search'
+        reason: 'Submit search and navigate'
       });
     }
 
@@ -290,6 +306,68 @@ Command: "${naturalLanguageCommand}"`;
         });
       }
 
+      // If user requested calculation in calculator
+      if (appName === 'calc' && (commandLower.includes('calculate') || commandLower.includes('compute') || /[\d\+\-\*\/]/.test(naturalLanguageCommand))) {
+        const mathMatch = naturalLanguageCommand.match(/(?:calculate|compute)?\s*(\d+[\s\+\-\*\/]+\d+)/i);
+        if (mathMatch) {
+          actions.push({
+            id: `act_${Date.now()}_calc_input`,
+            type: 'KEYBOARD_INPUT',
+            parameters: { text: mathMatch[1].replace(/\s+/g, '') },
+            confidence: 0.95,
+            riskLevel: 'LOW_RISK',
+            reason: `Input math expression ${mathMatch[1]} into calculator`
+          });
+          actions.push({
+            id: `act_${Date.now()}_calc_enter`,
+            type: 'PRESS_KEY',
+            parameters: { key: 'enter' },
+            confidence: 0.95,
+            riskLevel: 'LOW_RISK',
+            reason: 'Compute calculation result'
+          });
+        }
+      }
+
+      // If user requested saving document
+      if (commandLower.includes('save')) {
+        actions.push({
+          id: `act_${Date.now()}_save_hotkey`,
+          type: 'HOTKEY',
+          parameters: { keys: ['control', 's'] },
+          confidence: 0.95,
+          riskLevel: 'LOW_RISK',
+          reason: `Save document in ${appName}`
+        });
+        const saveAsMatch = naturalLanguageCommand.match(/save(?:\s+it)?(?:\s+as)?\s+["']?([a-zA-Z0-9_\-\.]+)/i);
+        if (saveAsMatch && saveAsMatch[1] && !['it', 'as', 'file', 'to', 'then'].includes(saveAsMatch[1].toLowerCase())) {
+          actions.push({
+            id: `act_${Date.now()}_save_wait`,
+            type: 'WAIT',
+            parameters: { ms: 600 },
+            confidence: 0.95,
+            riskLevel: 'LOW_RISK',
+            reason: 'Wait for save dialog to open'
+          });
+          actions.push({
+            id: `act_${Date.now()}_save_filename`,
+            type: 'KEYBOARD_INPUT',
+            parameters: { text: saveAsMatch[1].trim() },
+            confidence: 0.95,
+            riskLevel: 'LOW_RISK',
+            reason: `Enter filename ${saveAsMatch[1]}`
+          });
+          actions.push({
+            id: `act_${Date.now()}_save_enter`,
+            type: 'PRESS_KEY',
+            parameters: { key: 'enter' },
+            confidence: 0.95,
+            riskLevel: 'LOW_RISK',
+            reason: 'Confirm save dialog'
+          });
+        }
+      }
+
       actions.push({
         id: `act_${Date.now()}_4`,
         type: 'OBSERVE_SCREEN',
@@ -364,10 +442,55 @@ Command: "${naturalLanguageCommand}"`;
       });
     }
 
-    // 7. Screenshot / Observation
-    else if (commandLower.includes('screenshot') || commandLower.includes('what is on screen') || commandLower.includes('observe')) {
+    // 7. Desktop Toggle / Minimize All
+    else if (commandLower.includes('show desktop') || commandLower.includes('minimize all') || commandLower.includes('go to desktop')) {
       actions.push({
         id: `act_${Date.now()}_1`,
+        type: 'HOTKEY',
+        parameters: { keys: ['win', 'd'] },
+        confidence: 0.98,
+        riskLevel: 'LOW_RISK',
+        reason: 'Minimize all active windows to reveal desktop'
+      });
+      actions.push({
+        id: `act_${Date.now()}_2`,
+        type: 'OBSERVE_SCREEN',
+        confidence: 0.95,
+        riskLevel: 'READ_ONLY',
+        reason: 'Verify desktop surface is active'
+      });
+    }
+
+    // 8. Windows Start Menu
+    else if (commandLower.includes('start menu') || commandLower.includes('press windows') || commandLower.includes('open start')) {
+      actions.push({
+        id: `act_${Date.now()}_1`,
+        type: 'HOTKEY',
+        parameters: { keys: ['win'] },
+        confidence: 0.98,
+        riskLevel: 'LOW_RISK',
+        reason: 'Toggle Windows Start Menu'
+      });
+      actions.push({
+        id: `act_${Date.now()}_2`,
+        type: 'OBSERVE_SCREEN',
+        confidence: 0.95,
+        riskLevel: 'READ_ONLY',
+        reason: 'Verify Start Menu is open'
+      });
+    }
+
+    // 9. Screenshot / Observation
+    else if (commandLower.includes('screenshot') || commandLower.includes('what is on screen') || commandLower.includes('observe') || commandLower.includes('capture screen')) {
+      actions.push({
+        id: `act_${Date.now()}_1`,
+        type: 'TAKE_SCREENSHOT',
+        confidence: 0.99,
+        riskLevel: 'READ_ONLY',
+        reason: 'Capture full desktop screenshot buffer'
+      });
+      actions.push({
+        id: `act_${Date.now()}_2`,
         type: 'OBSERVE_SCREEN',
         confidence: 0.99,
         riskLevel: 'READ_ONLY',

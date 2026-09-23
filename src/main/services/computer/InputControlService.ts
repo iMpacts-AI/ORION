@@ -21,7 +21,7 @@ export function resolveNativeInputExe(): string | null {
 }
 
 export interface IInputDriver {
-  mouseMove(x: number, y: number): Promise<void>;
+  mouseMove(x: number, y: number, smooth?: boolean): Promise<void>;
   mouseClick(button?: 'left' | 'right' | 'middle'): Promise<void>;
   mouseDoubleClick(): Promise<void>;
   mouseDown(button?: 'left' | 'right' | 'middle'): Promise<void>;
@@ -48,10 +48,32 @@ export class WindowsNativeInputDriver implements IInputDriver {
     return this.nativeExePath;
   }
 
-  public async mouseMove(x: number, y: number): Promise<void> {
+  public async mouseMove(x: number, y: number, smooth: boolean = true): Promise<void> {
     if (process.platform === 'win32') {
       const exe = this.nativeExePath || resolveNativeInputExe();
       if (exe) {
+        if (smooth) {
+          try {
+            const { stdout } = await execFileAsync(exe, ['getpos'], { timeout: 1000 });
+            const m = stdout.match(/POS:(-?\d+),(-?\d+)/);
+            if (m) {
+              const startX = parseInt(m[1], 10);
+              const startY = parseInt(m[2], 10);
+              const dist = Math.hypot(x - startX, y - startY);
+              if (dist > 40) {
+                const steps = Math.min(8, Math.max(3, Math.round(dist / 80)));
+                for (let i = 1; i < steps; i++) {
+                  const t = i / steps;
+                  const ease = Math.sin((t * Math.PI) / 2);
+                  const curX = Math.round(startX + (x - startX) * ease);
+                  const curY = Math.round(startY + (y - startY) * ease);
+                  await execFileAsync(exe, ['setpos', String(curX), String(curY)], { timeout: 500 });
+                  await new Promise(r => setTimeout(r, 10));
+                }
+              }
+            }
+          } catch (err) {}
+        }
         try {
           await execFileAsync(exe, ['setpos', String(Math.round(x)), String(Math.round(y))], { timeout: 2000 });
           return;
@@ -152,6 +174,13 @@ export class WindowsNativeInputDriver implements IInputDriver {
 
   public async typeText(text: string): Promise<void> {
     if (process.platform === 'win32') {
+      const exe = this.nativeExePath || resolveNativeInputExe();
+      if (exe) {
+        try {
+          await execFileAsync(exe, ['type', text], { timeout: 4000 });
+          return;
+        } catch (err) {}
+      }
       try {
         const escaped = text.replace(/[{}+^%~()\[\]]/g, '{$&}').replace(/'/g, "''");
         const psCommand = `powershell -NoProfile -Command "$wshell = New-Object -ComObject Wscript.Shell; $wshell.SendKeys('${escaped}')"`;
@@ -162,18 +191,27 @@ export class WindowsNativeInputDriver implements IInputDriver {
 
   public async pressKey(key: string): Promise<void> {
     if (process.platform === 'win32') {
-      try {
-        let keyToSend = key;
-        if (key.toLowerCase() === 'enter') keyToSend = '{ENTER}';
-        else if (key.toLowerCase() === 'tab') keyToSend = '{TAB}';
-        else if (key.toLowerCase() === 'escape' || key.toLowerCase() === 'esc') keyToSend = '{ESC}';
-        else if (key.toLowerCase() === 'backspace') keyToSend = '{BACKSPACE}';
-        else if (key.toLowerCase() === 'delete') keyToSend = '{DEL}';
-        else if (key.toLowerCase() === 'up') keyToSend = '{UP}';
-        else if (key.toLowerCase() === 'down') keyToSend = '{DOWN}';
-        else if (key.toLowerCase() === 'left') keyToSend = '{LEFT}';
-        else if (key.toLowerCase() === 'right') keyToSend = '{RIGHT}';
+      let keyToSend = key;
+      const lower = key.toLowerCase();
+      if (lower === 'enter') keyToSend = '{ENTER}';
+      else if (lower === 'tab') keyToSend = '{TAB}';
+      else if (lower === 'escape' || lower === 'esc') keyToSend = '{ESC}';
+      else if (lower === 'backspace') keyToSend = '{BACKSPACE}';
+      else if (lower === 'delete') keyToSend = '{DEL}';
+      else if (lower === 'up') keyToSend = '{UP}';
+      else if (lower === 'down') keyToSend = '{DOWN}';
+      else if (lower === 'left') keyToSend = '{LEFT}';
+      else if (lower === 'right') keyToSend = '{RIGHT}';
+      else if (lower === 'space') keyToSend = ' ';
 
+      const exe = this.nativeExePath || resolveNativeInputExe();
+      if (exe) {
+        try {
+          await execFileAsync(exe, ['presskey', keyToSend], { timeout: 2000 });
+          return;
+        } catch (err) {}
+      }
+      try {
         const psCommand = `powershell -NoProfile -Command "$wshell = New-Object -ComObject Wscript.Shell; $wshell.SendKeys('${keyToSend}')"`;
         await execAsync(psCommand, { timeout: 2000 });
       } catch (err) {}
@@ -190,17 +228,30 @@ export class WindowsNativeInputDriver implements IInputDriver {
 
   public async hotkey(keys: string[]): Promise<void> {
     if (process.platform === 'win32') {
-      try {
-        let prefix = '';
-        let mainKey = '';
-        for (const k of keys) {
-          const l = k.toLowerCase();
-          if (l === 'ctrl' || l === 'control') prefix += '^';
-          else if (l === 'alt') prefix += '%';
-          else if (l === 'shift') prefix += '+';
+      let prefix = '';
+      let mainKey = '';
+      for (const k of keys) {
+        const l = k.toLowerCase();
+        if (l === 'ctrl' || l === 'control') prefix += '^';
+        else if (l === 'alt') prefix += '%';
+        else if (l === 'shift') prefix += '+';
+        else if (l === 'win' || l === 'windows') prefix += '^{ESC}';
+        else {
+          if (l === 'enter') mainKey = '{ENTER}';
+          else if (l === 'tab') mainKey = '{TAB}';
+          else if (l === 'esc') mainKey = '{ESC}';
           else mainKey = k;
         }
-        const formatted = `${prefix}${mainKey}`;
+      }
+      const formatted = `${prefix}${mainKey}`;
+      const exe = this.nativeExePath || resolveNativeInputExe();
+      if (exe) {
+        try {
+          await execFileAsync(exe, ['presskey', formatted], { timeout: 2000 });
+          return;
+        } catch (err) {}
+      }
+      try {
         const psCommand = `powershell -NoProfile -Command "$wshell = New-Object -ComObject Wscript.Shell; $wshell.SendKeys('${formatted}')"`;
         await execAsync(psCommand, { timeout: 2000 });
       } catch (err) {}
