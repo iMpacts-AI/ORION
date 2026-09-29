@@ -13,10 +13,15 @@
 [![Kinetic OS](https://img.shields.io/badge/Kinetic%20OS-Sub--25ms%20Win32-emerald.svg)](src/main/platform/win32-native-input.cs)
 [![Security](https://img.shields.io/badge/Security-Context%20Isolated-success.svg)](docs/security/security.md)
 [![Parent Organization](https://img.shields.io/badge/Organization-iMpact%20AI-00f0ff.svg)](https://github.com/iMpacts-AI/iMpact)
-[![Research: Open Systems](https://img.shields.io/badge/Research-Autonomous%20Agents-blueviolet.svg)]()
+[![Founder: SHEIKH MOHAMMED SAQIB](https://img.shields.io/badge/FOUNDER-SHEIKH%20MOHAMMED%20SAQIB-blue.svg)](https://github.com/iMpacts-AI/Sheikh-Mohammed-Saqib)
+[![Portal](https://img.shields.io/badge/Website-impacts--ai.com-0052cc.svg)](https://impacts-ai.com/)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-impact--ai-0A66C2.svg)](https://www.linkedin.com/in/impact-ai)
+[![Instagram](https://img.shields.io/badge/Instagram-@impacts__ai-E4405F.svg)](https://www.instagram.com/impacts_ai/)
+[![YouTube](https://img.shields.io/badge/YouTube-iMpact%20AI-FF0000.svg)](https://www.youtube.com/channel/UCGHBVNRNwYRRfY02yQqemPQ)
 
-> **"YOUR AI. YOUR COMPUTER. YOUR WORLD."**  
-> *ORION is the flagship autonomous desktop AI operating system developed by [iMpact AI](https://github.com/iMpacts-AI/iMpact). Operating with native Win32 kinetic input drivers, real-time hardware telemetry, closed-loop Observe-Plan-Act-Verify automation, and strict deterministic safety gates.*
+> ### **"YOUR AI. YOUR COMPUTER. YOUR WORLD."**  
+> **NETWORK &bull; REASON &bull; IMPACT**  
+> *ORION is the flagship autonomous desktop AI operating system engineered by [SHEIKH MOHAMMED SAQIB](https://github.com/iMpacts-AI/Sheikh-Mohammed-Saqib) under [iMpact AI](https://github.com/iMpacts-AI/iMpact). Operating with native Win32 kinetic input drivers, real-time hardware telemetry, closed-loop Observe-Plan-Act-Verify automation, and strict deterministic safety gates.*
 
 </div>
 
@@ -371,7 +376,7 @@ ORION/
 
 ORION is engineered with the ambition of building an unusually strong technical foundation at the intersection of agentic AI, operating systems, and human-computer interaction.
 
-* **Independent Builder Origin:** Conceived, architected, and continuously developed by **Sheikh Saqib**, a young independent builder based in the UAE.
+* **Independent Builder Origin:** Conceived, architected, and continuously developed by **[SHEIKH MOHAMMED SAQIB](https://github.com/iMpacts-AI/Sheikh-Mohammed-Saqib)**, Founder & Chief AI Systems Architect of iMpact AI.
 * **Empirical Integrity:** We do not publish speculative mockups or exaggerate autonomous capabilities. Every feature documented in this repository is backed by passing unit/integration suites and verified system telemetry.
 * **Global Academic & Fellowship Collaboration:** We actively welcome technical dialogue, evaluations, and collaboration with:
   * Top-tier computer science, AI, and robotics departments worldwide (undergraduate and pre-university research pathways).
@@ -383,12 +388,13 @@ ORION is engineered with the ambition of building an unusually strong technical 
 
 ## 14. About iMpact & Builder Profile
 
-**iMpact AI** is the parent technology initiative founded by **Sheikh Saqib** focused on intelligent software, autonomous agents, and sovereign desktop systems.
+**iMpact AI** is the parent technology initiative founded by **[SHEIKH MOHAMMED SAQIB](https://github.com/iMpacts-AI/Sheikh-Mohammed-Saqib)** focused on intelligent software, autonomous agents, and sovereign desktop systems.
 
-* **Founder:** Sheikh Saqib (Independent Software Builder)
-* **Initiative:** iMpact AI ([https://impacts-ai.com](https://impacts-ai.com))
+* **Founder & Chief Architect:** [SHEIKH MOHAMMED SAQIB](https://github.com/iMpacts-AI/Sheikh-Mohammed-Saqib) (Independent AI Systems Engineer)
+* **Founder Portfolio & Monograph Series:** [https://github.com/iMpacts-AI/Sheikh-Mohammed-Saqib](https://github.com/iMpacts-AI/Sheikh-Mohammed-Saqib)
+* **Parent Initiative:** iMpact AI ([https://impacts-ai.com](https://impacts-ai.com))
 * **Organization GitHub:** [https://github.com/iMpacts-AI](https://github.com/iMpacts-AI)
-* **Philosophy:** *"Ideas are ideas. Implementation is the real deal. Measure honestly, build relentlessly, expand human agency."*
+* **Philosophy & Motto:** **NETWORK • REASON • IMPACT** &bull; *"Ideas are ideas. Implementation is the real deal. Measure honestly, build relentlessly, expand human agency."*
 * **Contact:** `contact@impacts-ai.com`
 
 ---
