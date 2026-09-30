@@ -389,10 +389,6 @@ ORION is engineered with the ambition of building an unusually strong technical 
 
 ## 14. About iMpact & Builder Profile
 
-<a href="https://github.com/iMpacts-AI/Sheikh-Mohammed-Saqib">
-  <img src="https://raw.githubusercontent.com/iMpacts-AI/Sheikh-Mohammed-Saqib/main/assets/founder-photo.png" alt="SHEIKH MOHAMMED SAQIB" width="160" style="border-radius: 14px; box-shadow: 0 6px 20px rgba(0,0,0,0.15); margin-top: 10px; margin-bottom: 14px;" />
-</a>
-
 **iMpact AI** is the parent technology initiative founded by **[SHEIKH MOHAMMED SAQIB](https://github.com/iMpacts-AI/Sheikh-Mohammed-Saqib)** focused on intelligent software, autonomous agents, and sovereign desktop systems.
 
 * **Founder & Chief Architect:** [SHEIKH MOHAMMED SAQIB](https://github.com/iMpacts-AI/Sheikh-Mohammed-Saqib) (Independent AI Systems Engineer)
