@@ -18,6 +18,7 @@
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-impact--ai-0A66C2.svg)](https://www.linkedin.com/in/impact-ai)
 [![Instagram](https://img.shields.io/badge/Instagram-@impacts__ai-E4405F.svg)](https://www.instagram.com/impacts_ai/)
 [![YouTube](https://img.shields.io/badge/YouTube-iMpact%20AI-FF0000.svg)](https://www.youtube.com/channel/UCGHBVNRNwYRRfY02yQqemPQ)
+[![Email](https://img.shields.io/badge/Email-saqib%40impacts--ai.com-D14836.svg)](mailto:saqib@impacts-ai.com)
 
 > ### **"YOUR AI. YOUR COMPUTER. YOUR WORLD."**  
 > **NETWORK &bull; REASON &bull; IMPACT**  
@@ -395,11 +396,11 @@ ORION is engineered with the ambition of building an unusually strong technical 
 * **Parent Initiative:** iMpact AI ([https://impacts-ai.com](https://impacts-ai.com))
 * **Organization GitHub:** [https://github.com/iMpacts-AI](https://github.com/iMpacts-AI)
 * **Philosophy & Motto:** **NETWORK • REASON • IMPACT** &bull; *"Ideas are ideas. Implementation is the real deal. Measure honestly, build relentlessly, expand human agency."*
-* **Contact:** `contact@impacts-ai.com`
+* **Founder Email & Direct Inquiries:** [saqib@impacts-ai.com](mailto:saqib@impacts-ai.com)
 
 ---
 
 ## 15. Security & Responsible Disclosure
 
-ORION treats security as a core architectural constraint. If you discover a vulnerability or security flaw, please review our [Security Architecture](docs/security/security.md) and report findings directly to `security@impacts-ai.com` or via [https://impacts-ai.com/contact](https://impacts-ai.com/contact).
+ORION treats security as a core architectural constraint. If you discover a vulnerability or security flaw, please review our [Security Architecture](docs/security/security.md) and report findings directly to `security@impacts-ai.com` or [saqib@impacts-ai.com](mailto:saqib@impacts-ai.com).
 
