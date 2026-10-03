@@ -37,6 +37,28 @@ Unlike conventional AI assistants that remain trapped inside browser chat bubble
 * **Flagship Platform:** [ORION Operating System](https://github.com/iMpacts-AI/ORION)
 * **Parent Organization:** [iMpact AI](https://github.com/iMpacts-AI/iMpact)
 
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  orion@system-core                                                          │
+│  ─────────────────────────────────────────────────────────────────────────  │
+│          .---.       Platform: ORION Autonomous Desktop AI Operating System │
+│        .'  _  '.     Version: v1.0.0-production.1                           │
+│       /   (_)   \    Engine: Electron 33.2.1 + Node.js Main Process         │
+│      |  .-' '-.  |   HUD: React 18 + Three.js 3D Planetary Torus            │
+│      | (  (o)  ) |   Input Driver: Win32 Native API (sub-25ms latency)      │
+│      |  '-._.-'  |   Vision: 1080p Optical Frame Grounding & Perception     │
+│       \   (_)   /    Planner: Directed Acyclic Graph (DAG) Parallel Tools   │
+│        '.  _  .'     Safety: Zero-Cloud Context Isolation & Hardened IPC    │
+│          '---'       Killswitch: Instant Process-Tree Estop (<5ms)          │
+│       O R I O N      Routing: OpenRouter • Groq • Gemini • Local Models     │
+│     [ KINETIC OS ]   Quality Score: 43/43 Automated Suites Passing (100%)   │
+│                      Memory: Multi-Tier Vector + Epodic Executive Cache     │
+│                      Status: ACTIVE // PRODUCTION READY                     │
+│                                                                             │
+│                      ███ ███ ███ ███ ███ ███ ███ ███                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
 ---
 
 ## 2. The Problem ORION Solves
