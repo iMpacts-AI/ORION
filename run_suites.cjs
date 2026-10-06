@@ -1,8 +1,9 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 const testDir = path.join(__dirname, 'src/main/services/__tests__');
+const helperPath = path.join(__dirname, 'runner_helper.cjs');
 const testFiles = fs.readdirSync(testDir).filter(f => f.endsWith('.test.ts'));
 
 console.log(`=== RUNNING ALL ${testFiles.length} TEST SUITES IN PURE PROCESS ISOLATION ===\n`);
@@ -14,16 +15,7 @@ for (const file of testFiles) {
   const fullPath = path.join(testDir, file);
   process.stdout.write(`RUNNING: ${file} ... `);
   try {
-    execSync(`node -e "
-      const ts = require('typescript');
-      const fs = require('fs');
-      require.extensions['.ts'] = function(m, f) {
-        const content = fs.readFileSync(f, 'utf8');
-        const compiled = ts.transpileModule(content, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } });
-        return m._compile(compiled.outputText, f);
-      };
-      require('${fullPath.replace(/\\/g, '/')}');
-    "`, { stdio: 'pipe' });
+    execFileSync(process.execPath, [helperPath, fullPath], { encoding: 'utf8', stdio: 'pipe' });
     passed++;
     console.log('[PASS]');
   } catch (err) {

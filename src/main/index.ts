@@ -11,6 +11,7 @@ const possibleEnvPaths = [
   path.resolve(__dirname, '../.env'),
   path.resolve(process.resourcesPath || '', '.env'),
   path.resolve(path.dirname(process.execPath || ''), '.env'),
+  path.resolve(os.homedir(), '.env'),
   path.resolve(os.homedir(), 'Downloads/ORION/.env')
 ];
 

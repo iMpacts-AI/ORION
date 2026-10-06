@@ -929,5 +929,42 @@ export class OrcaRouterProvider extends OpenAICompatibleAdapter {
   }
 }
 
+// 11. Ollama Local Sovereign AI Provider (Local Inference Hub)
+export class OllamaProvider extends OpenAICompatibleAdapter {
+  constructor() {
+    const defaultModel = process.env.OLLAMA_MODEL || 'llama3.1:8b';
+    const baseUrl = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434/v1';
+    super({
+      id: 'ollama',
+      displayName: 'Ollama Local Sovereign Engine',
+      envKeyName: 'OLLAMA_API_KEY',
+      baseUrl,
+      defaultModel,
+      codingModel: 'qwen2.5-coder:7b',
+      visionModel: 'gemma4:26b',
+      capabilities: {
+        supportsTools: true,
+        supportsVision: true,
+        supportsStreaming: true,
+        maxContextTokens: 131072,
+        taskCategories: ['FAST_CHAT', 'GENERAL_CHAT', 'TOOL_USE', 'CODING', 'PLANNING', 'COMPLEX_REASONING', 'VISION']
+      }
+    });
+    this.apiKey = process.env.OLLAMA_API_KEY || 'ollama-local';
+    this.isConfigured = true;
+    if (this.status) {
+      this.status.isConfigured = true;
+    }
+  }
+
+  public override reloadCredentials(): void {
+    this.apiKey = process.env.OLLAMA_API_KEY || 'ollama-local';
+    this.isConfigured = true;
+    if (this.status) {
+      this.status.isConfigured = true;
+    }
+  }
+}
+
 
 

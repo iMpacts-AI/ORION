@@ -16,7 +16,8 @@ import {
   DeepSeekProvider,
   CloudflareProvider,
   OpenRouterProvider,
-  OrcaRouterProvider
+  OrcaRouterProvider,
+  OllamaProvider
 } from './ProviderAdapters';
 import { eventBus } from '../../shared/events';
 
@@ -145,6 +146,50 @@ export class ModelRegistry {
       maxContextTokens: 64000,
       freeTierStatus: 'FREE TIER',
       isAvailable: true
+    },
+    {
+      providerId: 'ollama',
+      modelId: 'llama3.1:8b',
+      displayName: 'Llama 3.1 8B (Local Sovereign Engine)',
+      supportsTools: true,
+      supportsVision: false,
+      supportsStreaming: true,
+      maxContextTokens: 131072,
+      freeTierStatus: 'FREE',
+      isAvailable: true
+    },
+    {
+      providerId: 'ollama',
+      modelId: 'deepseek-r1:14b',
+      displayName: 'DeepSeek R1 14B (Local Reasoning)',
+      supportsTools: true,
+      supportsVision: false,
+      supportsStreaming: true,
+      maxContextTokens: 131072,
+      freeTierStatus: 'FREE',
+      isAvailable: true
+    },
+    {
+      providerId: 'ollama',
+      modelId: 'qwen2.5-coder:7b',
+      displayName: 'Qwen 2.5 Coder 7B (Local Coding)',
+      supportsTools: true,
+      supportsVision: false,
+      supportsStreaming: true,
+      maxContextTokens: 32768,
+      freeTierStatus: 'FREE',
+      isAvailable: true
+    },
+    {
+      providerId: 'ollama',
+      modelId: 'gemma4:26b',
+      displayName: 'Gemma 4 26B (Local Multimodal & Tools)',
+      supportsTools: true,
+      supportsVision: true,
+      supportsStreaming: true,
+      maxContextTokens: 262144,
+      freeTierStatus: 'FREE',
+      isAvailable: true
     }
   ];
 
@@ -168,8 +213,9 @@ export class OrionAIProviderRouter implements IAIProvider {
     this.fallbackProvider = new LocalHeuristicAIProvider();
     this.modelRegistry = new ModelRegistry();
 
-    // Register all legitimate provider adapters (OpenRouter as Primary Sovereign Brain)
+    // Register all legitimate provider adapters (OpenRouter and Local Ollama)
     const cloudAdapters: IAIProvider[] = [
+      new OllamaProvider(),
       new OpenRouterProvider(),
       new GroqProvider(),
       new GeminiProvider(),
@@ -187,12 +233,14 @@ export class OrionAIProviderRouter implements IAIProvider {
 
     eventBus.logActivity(
       'SYSTEM_EVENT',
-      `ORION Omni-Brain Router initialized (${this.getConfiguredProviders().length} cloud providers configured)`
+      `ORION Omni-Brain Router initialized (${this.getConfiguredProviders().length} AI providers configured)`
     );
   }
 
   private getSectorInfo(providerId: string): { sectorName: string; engineClass: string } {
     switch (providerId) {
+      case 'ollama':
+        return { sectorName: 'SECTOR 09 // OLLAMA SOVEREIGN LOCAL CORE', engineClass: 'Local On-Device Neural Engine' };
       case 'groq':
         return { sectorName: 'SECTOR 01 // HYPERION LPU CORE', engineClass: 'Sub-Second Quantum LPU Engine' };
       case 'gemini':

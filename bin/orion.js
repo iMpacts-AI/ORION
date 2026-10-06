@@ -205,9 +205,13 @@ function runDoctor() {
   console.log(`Test Harness:       ${runnerExists ? `\x1b[32m[PASS] ${suiteCount} test suites configured\x1b[0m` : '\x1b[31m[FAIL] Missing run_suites.cjs\x1b[0m'}`);
 
   // 5. Environment keys (.env)
-  const envPath = path.join(PROJECT_ROOT, '.env');
-  const hasEnv = fs.existsSync(envPath);
-  console.log(`Environment File:   ${hasEnv ? '\x1b[32m[PASS] .env present\x1b[0m' : '\x1b[33m[INFO] .env not found (Local Heuristic Mode active)\x1b[0m'}`);
+  const envCandidates = [
+    path.join(PROJECT_ROOT, '.env'),
+    path.join(require('os').homedir(), '.env')
+  ];
+  const envPath = envCandidates.find(p => fs.existsSync(p));
+  const hasEnv = Boolean(envPath);
+  console.log(`Environment File:   ${hasEnv ? `\x1b[32m[PASS]\x1b[0m ${envPath}` : '\x1b[33m[INFO] .env not found (Local Heuristic Mode active)\x1b[0m'}`);
 
   if (hasEnv) {
     const envContent = fs.readFileSync(envPath, 'utf8');
