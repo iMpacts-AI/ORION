@@ -299,7 +299,7 @@ export class OrionAIProviderRouter implements IAIProvider {
       return true;
     });
 
-    if (healthyConfigured.length === 0) {
+    if (this.activeStrategy === 'OFFLINE' || healthyConfigured.length === 0) {
       return null; // Fallback to local heuristic engine
     }
 

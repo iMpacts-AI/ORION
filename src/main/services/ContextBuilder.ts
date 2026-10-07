@@ -48,7 +48,7 @@ export class ContextBuilder {
         return `[OBSERVATION ${o.toolCallId}] Tool: ${o.source} | Status: ${o.verificationStatus} | Result: ${dataStr || o.summary}`;
       });
       const obsBlock = formattedObs.join('\n').slice(0, this.budget.maxObservationChars);
-      parts.push(`OBSERVATIONS & TOOL RESULTS DATA:\n${obsBlock}`);
+      parts.push(`UNTRUSTED OBSERVATIONS DATA & TOOL RESULTS:\n${obsBlock}`);
     }
 
     // Combine & enforce global character budget
