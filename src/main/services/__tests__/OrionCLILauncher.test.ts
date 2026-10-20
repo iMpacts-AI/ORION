@@ -11,6 +11,7 @@ function runOrionCLILauncherSuite() {
   const INSTALL_JS = path.join(PROJECT_ROOT, 'bin', 'install-cli.js');
   const INSTALL_BAT = path.join(PROJECT_ROOT, 'install-cli.bat');
   const INSTALL_PS1 = path.join(PROJECT_ROOT, 'install-cli.ps1');
+  const INSTALL_SH = path.join(PROJECT_ROOT, 'install.sh');
   const PKG_JSON = path.join(PROJECT_ROOT, 'package.json');
 
   console.log('=== RUNNING ORION CLI LAUNCHER & GLOBAL COMMAND VERIFICATION SUITE ===\n');
@@ -22,7 +23,8 @@ function runOrionCLILauncherSuite() {
   assert.strictEqual(fs.existsSync(INSTALL_JS), true, 'bin/install-cli.js must exist');
   assert.strictEqual(fs.existsSync(INSTALL_BAT), true, 'install-cli.bat must exist');
   assert.strictEqual(fs.existsSync(INSTALL_PS1), true, 'install-cli.ps1 must exist');
-  console.log('  ✓ 1. All CLI launcher binaries and setup scripts verified');
+  assert.strictEqual(fs.existsSync(INSTALL_SH), true, 'install.sh must exist');
+  console.log('  ✓ 1. All CLI launcher binaries and cross-platform setup scripts verified');
 
   // 2. package.json bin registration
   const pkg = JSON.parse(fs.readFileSync(PKG_JSON, 'utf8'));
@@ -30,7 +32,8 @@ function runOrionCLILauncherSuite() {
   assert.strictEqual(pkg.bin.orion, './bin/orion.js', 'package.json bin.orion must point to ./bin/orion.js');
   assert.ok(pkg.scripts['install:cli'], 'package.json must have "install:cli" script');
   assert.ok(pkg.scripts['setup:cli'], 'package.json must have "setup:cli" script');
-  console.log('  ✓ 2. package.json "bin" and CLI installer scripts verified');
+  assert.deepStrictEqual(pkg.os, ['darwin', 'linux', 'win32'], 'package.json must support darwin, linux, and win32');
+  console.log('  ✓ 2. package.json "bin", "os" (macOS/Linux/Windows), and CLI scripts verified');
 
   // 3. Version command check
   const verOutput = execSync(`node "${ORION_JS}" --version`, {
@@ -75,7 +78,14 @@ function runOrionCLILauncherSuite() {
   assert.strictEqual(fs.existsSync(electronExe), true, `Electron executable must exist at: ${electronExe}`);
   console.log('  ✓ 6. Module exports and Electron binary resolution verified');
 
-  console.log('\n[PASS] ORION CLI Launcher suite passed 6/6 assertions.\n');
+  // 7. Slash & Double-Slash Commands (/mcp & //commands) verification
+  const mcpOutput = execSync(`node "${ORION_JS}" /mcp`, { cwd: PROJECT_ROOT, encoding: 'utf8' });
+  assert.ok(mcpOutput.includes('ORION MODEL CONTEXT PROTOCOL (MCP) SERVERS'), 'Must list MCP servers');
+  const cmdsOutput = execSync(`node "${ORION_JS}" //commands`, { cwd: PROJECT_ROOT, encoding: 'utf8' });
+  assert.ok(cmdsOutput.includes('ORION CLI SLASH & DOUBLE-SLASH COMMANDS'), 'Must list //commands reference');
+  console.log('  ✓ 7. /mcp, //commands, and Al-Hiqmah cross-platform CLI verified');
+
+  console.log('\n[PASS] ORION CLI Launcher suite passed 7/7 assertions.\n');
 }
 
 runOrionCLILauncherSuite();

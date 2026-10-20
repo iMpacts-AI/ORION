@@ -1,12 +1,24 @@
 {
   "name": "orion",
   "version": "1.0.0",
-  "description": "ORION - AI Command System Desktop Assistant",
-  "main": "dist-electron/main/index.js",
+  "description": "ORION - Cross-Platform Autonomous AI Command-Line Interface (CLI) & Agent System for macOS, Linux, and Windows",
+  "main": "bin/orion.js",
   "bin": {
     "orion": "./bin/orion.js"
   },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
+    "start": "node bin/orion.js",
+    "cli": "node bin/orion.js",
+    "mcp": "node bin/orion.js /mcp",
+    "doctor": "node bin/orion.js doctor",
     "dev": "node node_modules/vite/bin/vite.js",
     "build": "node node_modules/typescript/bin/tsc && node node_modules/vite/bin/vite.js build",
     "test": "node run_suites.cjs",
@@ -27,6 +39,12 @@
     "win": {
       "target": "dir",
       "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": "dir"
+    },
+    "linux": {
+      "target": "dir"
     },
     "forceCodeSigning": false
   },

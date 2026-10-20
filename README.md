@@ -28,6 +28,39 @@
 
 ---
 
+## Quick Start — ORION Cross-Platform CLI (macOS, Linux & Windows + Node.js)
+
+ORION operates as a zero-latency, cross-platform terminal Command-Line Interface (orion) powered by Node.js and the **Al-Hiqmah Wisdom Engine**, supporting **macOS (darwin), Linux (linux), and Windows (win32)**:
+
+### 1. Install Globally
+`ash
+# macOS & Linux
+chmod +x install.sh && ./install.sh
+
+# Windows (PowerShell / CMD)
+npm run setup:cli
+
+# Universal Node.js Global Link (macOS / Linux / Windows)
+npm link
+`
+
+### 2. CLI Commands, /mcp, & //commands
+`ash
+orion                   # Launch interactive ORION CLI REPL (with Tab-autocomplete)
+orion //commands        # List all /slash and //double-slash commands
+orion /mcp              # List all Model Context Protocol (MCP) servers & status
+orion /mcp tools        # List all tools exposed across MCP servers
+orion /mcp add <n> <c>  # Register a new stdio or SSE MCP server
+orion /mcp call <s> <t> # Call an MCP tool directly from the terminal
+orion /open spotify     # Launch app with Al-Hiqmah multi-method + keyboard search fallback
+orion /search AI        # Instant browser search across macOS, Linux, and Windows
+orion /sys volume_up    # Cross-platform OS control (screenshot, volume, mute, lock, sleep)
+orion /status           # Live cross-platform CPU, RAM, OS, and application telemetry
+orion doctor            # Full pre-flight system & environment diagnostic check
+`
+
+---
+
 ## 1. What is ORION?
 
 **ORION** is the flagship technology platform created by **iMpact AI**. 
