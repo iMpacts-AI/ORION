@@ -1,10 +1,10 @@
 import { ComputerObservation, UIElementNode, ElementTargetSelector } from '../../../shared/types/action';
 import { ScreenCaptureService } from './ScreenCaptureService';
 import { WindowManagerService } from './WindowManagerService';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export class ScreenUnderstandingService {
   private screenCapture: ScreenCaptureService;
@@ -22,6 +22,36 @@ export class ScreenUnderstandingService {
   }
 
   public async captureObservation(): Promise<ComputerObservation> {
+    if (this.isMockMode) {
+      const activeWindow = await this.windowManager.getActiveWindow();
+      const visibleWindows = await this.windowManager.getVisibleWindows();
+      const interactiveElements = await this.inspectInteractiveElements(activeWindow.processName, activeWindow.title);
+      const visibleText = interactiveElements.map(e => e.text).filter(Boolean);
+      return {
+        observationId: `obs_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        timestamp: Date.now(),
+        screen: { width: 1920, height: 1080, scaleFactor: 1.0 },
+        activeWindow: {
+          title: activeWindow.title,
+          processName: activeWindow.processName,
+          processId: activeWindow.processId,
+          bounds: activeWindow.bounds
+        },
+        visibleWindows: visibleWindows.map(w => ({
+          title: w.title,
+          processName: w.processName,
+          processId: w.processId,
+          bounds: w.bounds
+        })),
+        cursor: { x: 960, y: 540 },
+        visibleText,
+        interactiveElements,
+        applications: visibleWindows.map(w => w.processName),
+        screenshotBase64: undefined,
+        confidence: 0.95
+      };
+    }
+
     const screen = await this.screenCapture.getScreenMetrics();
     const activeWindow = await this.windowManager.getActiveWindow();
     const visibleWindows = await this.windowManager.getVisibleWindows();
@@ -72,13 +102,14 @@ export class ScreenUnderstandingService {
         const psScript = `
         Add-Type -AssemblyName UIAutomationClient;
         Add-Type -AssemblyName UIAutomationTypes;
+        $safeTitle = $env:ORION_UIA_WINDOW_TITLE;
         $root = [System.Windows.Automation.AutomationElement]::RootElement;
         $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Window);
         $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $cond);
         $win = $null;
         for ($k = 0; $k -lt $wins.Count; $k++) {
             $w = $wins.Item($k);
-            if ($w.Current.Name -match '${safeTitle}' -or $w.Current.Name -match 'Notepad|Code|Chrome|ORION') {
+            if (($safeTitle -and $w.Current.Name -match [regex]::Escape($safeTitle)) -or $w.Current.Name -match 'Notepad|Code|Chrome|ORION') {
                 $win = $w;
                 break;
             }
@@ -117,7 +148,11 @@ export class ScreenUnderstandingService {
             $results | ConvertTo-Json -Compress
         }
         `;
-        const { stdout } = await execAsync(`powershell -NoProfile -Command "${psScript.replace(/\r?\n/g, ' ')}"`, { timeout: 1200 });
+        const { stdout } = await execFileAsync(
+          'powershell.exe',
+          ['-NoProfile', '-NonInteractive', '-Command', psScript.replace(/\r?\n/g, ' ')],
+          { timeout: 1200, env: { ...process.env, ORION_UIA_WINDOW_TITLE: safeTitle } }
+        );
         if (stdout.trim().startsWith('[') || stdout.trim().startsWith('{')) {
           const parsed = JSON.parse(stdout.trim());
           const arr = Array.isArray(parsed) ? parsed : [parsed];

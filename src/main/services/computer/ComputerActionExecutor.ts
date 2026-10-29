@@ -15,11 +15,13 @@ import { ComputerActionPlanner } from './ComputerActionPlanner';
 import { TaskStateStore } from './TaskStateStore';
 import { TaskStateMachine } from './TaskStateMachine';
 import { ProcessSupervisor } from './ProcessSupervisor';
+import { WindowsAppResolver } from './WindowsAppResolver';
 import { eventBus } from '../../../shared/events';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
+import * as path from 'path';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export class ComputerActionExecutor {
   private screenUnderstanding: ScreenUnderstandingService;
@@ -30,7 +32,10 @@ export class ComputerActionExecutor {
   private recoveryService: ComputerRecoveryService;
   private planner?: ComputerActionPlanner;
   private stateStore: TaskStateStore;
+  private appResolver: WindowsAppResolver;
   private activePlanLock: boolean = false;
+  private maxTotalActions: number = 25;
+  private maxPlanDurationMs: number = 60000;
 
   constructor(
     screenUnderstanding?: ScreenUnderstandingService,
@@ -40,7 +45,8 @@ export class ComputerActionExecutor {
     verifier?: ComputerActionVerifier,
     recoveryService?: ComputerRecoveryService,
     planner?: ComputerActionPlanner,
-    stateStore?: TaskStateStore
+    stateStore?: TaskStateStore,
+    appResolver?: WindowsAppResolver
   ) {
     this.screenUnderstanding = screenUnderstanding || new ScreenUnderstandingService();
     this.inputControl = inputControl || new InputControlService();
@@ -50,6 +56,7 @@ export class ComputerActionExecutor {
     this.recoveryService = recoveryService || new ComputerRecoveryService();
     this.planner = planner;
     this.stateStore = stateStore || new TaskStateStore();
+    this.appResolver = appResolver || WindowsAppResolver.getInstance();
   }
 
   public getStateStore(): TaskStateStore {
@@ -79,6 +86,7 @@ export class ComputerActionExecutor {
 
     let replanCount = 0;
     const maxReplans = 2;
+    let executedActionCount = 0;
 
     try {
       for (let i = plan.currentActionIndex; i < plan.actions.length; i++) {
@@ -96,6 +104,19 @@ export class ComputerActionExecutor {
         // Check cancellation
         if (plan.cancellationState?.isCancelled) {
           stateMachine.transition('CANCELLED', 'Task cancelled by caller');
+          plan.status = stateMachine.getState();
+          break;
+        }
+
+        // Enforce total action budget and wall-clock time budget
+        executedActionCount++;
+        if (executedActionCount > this.maxTotalActions) {
+          stateMachine.transition('FAILED', `Action budget exceeded (max ${this.maxTotalActions} actions).`);
+          plan.status = stateMachine.getState();
+          break;
+        }
+        if (Date.now() - planStartTime > this.maxPlanDurationMs) {
+          stateMachine.transition('FAILED', `Plan time budget exceeded (${this.maxPlanDurationMs}ms).`);
           plan.status = stateMachine.getState();
           break;
         }
@@ -209,12 +230,37 @@ export class ComputerActionExecutor {
     return plan;
   }
 
-  public async executeAction(action: ComputerAction, taskId: string = 'task_standalone', isDryRunOverride?: boolean): Promise<ActionResult> {
+  public async executeAction(
+    action: ComputerAction,
+    taskId: string = 'task_standalone',
+    isDryRunOverride?: boolean,
+    recoveryAttempt: number = 0
+  ): Promise<ActionResult> {
     const startTime = Date.now();
+    if (!action || typeof action !== 'object') {
+      return {
+        actionId: 'invalid_action',
+        success: false,
+        preconditionsMet: false,
+        postconditionsVerified: false,
+        error: 'Execution BLOCKED: Malformed or missing ComputerAction representation.',
+        timestamp: Date.now(),
+        executionTimeMs: 0
+      };
+    }
+
+    // Normalize payload and parameters so callers passing either field behave consistently
+    if (action.payload && typeof action.payload === 'object') {
+      action.parameters = {
+        ...(action.parameters && typeof action.parameters === 'object' ? action.parameters : {}),
+        ...action.payload
+      };
+    }
+
     const isDryRun = isDryRunOverride ?? action.isDryRun ?? false;
 
-    // 1. Permission & Emergency Stop Evaluation
-    const perm = this.permissionService.evaluateActionPermission(action);
+    // 1. Permission & Emergency Stop Evaluation (consumes single-use approval on live execution)
+    const perm = this.permissionService.evaluateActionPermission(action, { consumeApproval: !isDryRun });
     if (!perm.allowed) {
       return {
         actionId: action.id,
@@ -267,48 +313,111 @@ export class ComputerActionExecutor {
             }
             break;
 
-          case 'OPEN_APP':
-            if (action.parameters?.appName) {
-              const rawApp = action.parameters.appName.trim();
-              // BLOCKER-02 Security Allowlist & Sanitization
-              const ALLOWED_APPS = new Map<string, string>([
-                ['notepad', 'notepad.exe'],
-                ['chrome', 'chrome.exe'],
-                ['code', 'code.cmd'],
-                ['vscode', 'code.cmd'],
-                ['explorer', 'explorer.exe'],
-                ['files', 'explorer.exe'],
-                ['calc', 'calc.exe'],
-                ['calculator', 'calc.exe'],
-                ['edge', 'msedge.exe'],
-                ['msedge', 'msedge.exe'],
-                ['paint', 'mspaint.exe'],
-                ['mspaint', 'mspaint.exe'],
-                ['terminal', 'powershell.exe'],
-                ['powershell', 'powershell.exe'],
-                ['cmd', 'cmd.exe'],
-                ['taskmgr', 'taskmgr.exe']
-              ]);
-              const baseName = rawApp.toLowerCase().replace(/\.exe$/, '');
-              const sanitizedExe = ALLOWED_APPS.get(baseName) || (ALLOWED_APPS.has(rawApp.toLowerCase()) ? ALLOWED_APPS.get(rawApp.toLowerCase()) : null);
-              if (!sanitizedExe) {
-                throw new Error(`[SECURITY BLOCKED] Disallowed or unregistered application: '${rawApp}'. Application launch must be in authorized whitelist.`);
-              }
-              if (process.platform === 'win32' && !this.inputControl.getDriver().constructor.name.includes('Mock')) {
-                try {
-                  const args = action.parameters.path ? [action.parameters.path] : [];
-                  await ProcessSupervisor.getInstance().runManagedCommand(sanitizedExe, args, { detached: true }, 5000);
-                  await new Promise(r => setTimeout(r, 600));
-                  await this.windowManager.focusWindow(sanitizedExe);
-                } catch (e: any) {
-                  // Fallback: Ensure app window is brought to front
-                  try {
-                    await this.windowManager.focusWindow(sanitizedExe);
-                  } catch (focusErr) {}
-                }
+          case 'OPEN_APP': {
+            const rawApp = String(action.parameters?.appName || action.target || '').trim();
+            if (!rawApp) {
+              throw new Error(`[SECURITY BLOCKED] OPEN_APP requires a non-empty appName.`);
+            }
+            const resolvedApp = this.appResolver.resolveApp(rawApp);
+            const validatedPathArg = this.appResolver.validateLaunchArgument(action.parameters?.path);
+            const validatedArrayArgs = this.appResolver.validateLaunchArguments(action.parameters?.args);
+            const extraArgs = [...validatedArrayArgs];
+            for (const pArg of validatedPathArg) {
+              if (!extraArgs.includes(pArg)) {
+                extraArgs.push(pArg);
               }
             }
+            const launchArgs = [...resolvedApp.defaultArgs, ...extraArgs];
+
+            action.parameters = {
+              ...(action.parameters || {}),
+              _resolvedCanonicalId: resolvedApp.canonicalId,
+              _resolvedDisplayName: resolvedApp.displayName,
+              _resolvedExecutablePath: resolvedApp.resolvedExecutablePath,
+              _resolvedDiscoverySource: resolvedApp.discoverySource,
+              _resolvedProcessNames: resolvedApp.processNames
+            };
+
+            if (process.platform === 'win32' && !this.inputControl.getDriver().constructor.name.includes('Mock')) {
+              if (!resolvedApp.existsOnDisk && !resolvedApp.isProtocolUri && !resolvedApp.isStoreApp) {
+                throw new Error(
+                  `ENOENT: Application '${resolvedApp.displayName}' (${resolvedApp.executableName}) is not installed or could not be found on disk.`
+                );
+              }
+
+              const usesShellActivation =
+                resolvedApp.isProtocolUri ||
+                Boolean(resolvedApp.isStoreApp) ||
+                resolvedApp.canonicalId === 'explorer' ||
+                (resolvedApp.discoverySource === 'START_MENU_SHORTCUT' &&
+                  Boolean(resolvedApp.shortcutPath) &&
+                  path.basename(resolvedApp.resolvedExecutablePath).toLowerCase() === 'explorer.exe');
+
+              if (usesShellActivation) {
+                const activationTarget = resolvedApp.isProtocolUri
+                  ? resolvedApp.resolvedExecutablePath
+                  : resolvedApp.isStoreApp && resolvedApp.aumid
+                    ? `shell:AppsFolder\\${resolvedApp.aumid}`
+                    : resolvedApp.shortcutPath &&
+                        path.basename(resolvedApp.resolvedExecutablePath).toLowerCase() === 'explorer.exe'
+                      ? resolvedApp.shortcutPath
+                      : resolvedApp.resolvedExecutablePath;
+
+                const psScript =
+                  extraArgs.length > 0
+                    ? `$argList = ConvertFrom-Json $env:ORION_LAUNCH_ARGS_JSON; Start-Process -FilePath $env:ORION_LAUNCH_TARGET -ArgumentList $argList -ErrorAction Stop`
+                    : `Start-Process -FilePath $env:ORION_LAUNCH_TARGET -ErrorAction Stop`;
+
+                const shellRes = await ProcessSupervisor.getInstance().runManagedCommand(
+                  'powershell.exe',
+                  ['-NoProfile', '-NonInteractive', '-Command', psScript],
+                  {
+                    ownerTaskId: taskId,
+                    windowsHide: true,
+                    env: {
+                      ...process.env,
+                      ORION_LAUNCH_TARGET: activationTarget,
+                      ORION_LAUNCH_ARGS_JSON: JSON.stringify(extraArgs)
+                    }
+                  },
+                  8000
+                );
+
+                if (shellRes.exitCode !== 0) {
+                  throw new Error(
+                    `Failed to launch '${resolvedApp.displayName}' via Windows activation (exit code ${shellRes.exitCode}): ${(shellRes.stderr || shellRes.stdout || 'Unknown activation error').trim()}`
+                  );
+                }
+              } else {
+                const spawnRes = await ProcessSupervisor.getInstance().runManagedCommand(
+                  resolvedApp.resolvedExecutablePath,
+                  launchArgs,
+                  {
+                    detached: true,
+                    isDetachedUserApp: true,
+                    ownerTaskId: taskId,
+                    windowsHide: false
+                  },
+                  8000
+                );
+                action.parameters._spawnedPid = spawnRes.pid;
+              }
+
+              // Bounded post-launch window focus & process observation (up to ~1050ms)
+              let focused = false;
+              for (let attempt = 0; attempt < 3; attempt++) {
+                await new Promise(r => setTimeout(r, 350));
+                focused =
+                  (await this.windowManager.focusWindow(resolvedApp.displayName)) ||
+                  (await this.windowManager.focusWindow(resolvedApp.canonicalId));
+                if (focused) break;
+              }
+              const procRunning = await this.isProcessRunningOnWindows(resolvedApp.processNames);
+              action.parameters._processRunningVerified = procRunning;
+              action.parameters._windowFocusVerified = focused;
+            }
             break;
+          }
 
           case 'CLOSE_WINDOW':
             if (action.target) {
@@ -403,17 +512,34 @@ export class ComputerActionExecutor {
       : await this.verifier.verifyExecution(action, priorObservation, postObservation);
 
     if (!execSuccess || !verification.verified) {
-      // 6. Recovery Strategy
+      if (this.permissionService.isEmergencyStopped()) {
+        return {
+          actionId: action.id,
+          success: false,
+          preconditionsMet: true,
+          postconditionsVerified: false,
+          observedState: postObservation,
+          error: 'Execution BLOCKED: ORION Emergency Stop is active.',
+          isDryRun,
+          timestamp: Date.now(),
+          executionTimeMs: Date.now() - startTime
+        };
+      }
+
+      // 6. Recovery Strategy (Bounded by recoveryAttempt counter)
       const recoveryPlan = await this.recoveryService.formulateRecovery(
         action,
         execError || verification.reason || 'Verification failure',
-        0,
+        recoveryAttempt,
         postObservation
       );
 
       if (recoveryPlan.shouldRetry && recoveryPlan.recoveryActions.length > 0) {
         for (const recAct of recoveryPlan.recoveryActions) {
-          const recRes = await this.executeAction(recAct, taskId);
+          if (this.permissionService.isEmergencyStopped()) {
+            break;
+          }
+          const recRes = await this.executeAction(recAct, taskId, isDryRunOverride, recoveryAttempt + 1);
           if (recRes.success && recRes.postconditionsVerified) {
             return {
               actionId: action.id,
@@ -422,12 +548,28 @@ export class ComputerActionExecutor {
               postconditionsVerified: true,
               observedState: postObservation,
               recovered: true,
-              recoveryAttempts: 1,
+              recoveryAttempts: recoveryAttempt + 1,
               timestamp: Date.now(),
               executionTimeMs: Date.now() - startTime
             };
           }
         }
+      }
+
+      // Honest outcome for asynchronous desktop/URI/Store launches whose OS spawn succeeded
+      // without an observable foreground window (`launched_unverified` rather than verified completion).
+      if (action.type === 'OPEN_APP' && execSuccess && !verification.verified) {
+        return {
+          actionId: action.id,
+          success: true,
+          preconditionsMet: true,
+          postconditionsVerified: false,
+          observedState: postObservation,
+          error: verification.reason || 'Application launch dispatched; foreground window could not be verified.',
+          isDryRun,
+          timestamp: Date.now(),
+          executionTimeMs: Date.now() - startTime
+        };
       }
 
       return {
@@ -455,5 +597,30 @@ export class ComputerActionExecutor {
       timestamp: Date.now(),
       executionTimeMs: Date.now() - startTime
     };
+  }
+
+  public getAppResolver(): WindowsAppResolver {
+    return this.appResolver;
+  }
+
+  public async isProcessRunningOnWindows(processNames: string[]): Promise<boolean> {
+    if (process.platform !== 'win32' || !Array.isArray(processNames) || processNames.length === 0) {
+      return false;
+    }
+    try {
+      const { stdout } = await execFileAsync('tasklist.exe', ['/FO', 'CSV', '/NH'], {
+        timeout: 3000,
+        windowsHide: true
+      });
+      const lowerOut = String(stdout || '').toLowerCase();
+      return processNames.some(p => {
+        const clean = String(p || '').toLowerCase().trim();
+        if (!clean) return false;
+        const withExe = clean.endsWith('.exe') ? clean : `${clean}.exe`;
+        return lowerOut.includes(`"${withExe}"`) || lowerOut.includes(`"${clean}"`);
+      });
+    } catch {
+      return false;
+    }
   }
 }

@@ -46,7 +46,7 @@ async function runComputerHUDIntegrationTests() {
     plan.actions.push({
       id: 'act_hud_high',
       type: 'WRITE_FILE',
-      payload: { filePath: 'C:\\Users\\smsaq\\test.txt' },
+      payload: { filePath: 'C:\\Users\\operator\\test.txt' },
       confidence: 0.95,
       riskLevel: 'HIGH_RISK'
     });

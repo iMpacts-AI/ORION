@@ -19,7 +19,7 @@ async function runTitanClosedLoopPipelineTests() {
     }
   }
 
-  const titanRootDir = 'C:\\Users\\smsaq\\Project_Titan';
+  const titanRootDir = (process.env.ORION_TITAN_WORKSPACE || 'C:\\Users\\operator\\Project_Titan');
 
   // 1. Initial State Verification
   {
@@ -268,7 +268,7 @@ async function runTitanClosedLoopPipelineTests() {
   // 11. Path Traversal & Workspace Escape Rejection
   {
     const pipeline = new TitanClosedLoopPipeline();
-    const res = await pipeline.executePipeline({ titanRootDir: 'C:\\Users\\smsaq\\Downloads' });
+    const res = await pipeline.executePipeline({ titanRootDir: 'C:\\Users\\operator\\Downloads' });
     assert(
       res.state === 'ERROR' && Boolean(res.error?.includes('escapes Titan root workspace')),
       'Security check rejects workspace path escaping Titan root directory'
@@ -349,7 +349,7 @@ async function runTitanClosedLoopPipelineTests() {
   // 15. Structured Error Propagation
   {
     const pipeline = new TitanClosedLoopPipeline();
-    const res = await pipeline.executePipeline({ titanRootDir: 'C:\\Users\\smsaq\\Desktop' });
+    const res = await pipeline.executePipeline({ titanRootDir: 'C:\\Users\\operator\\Desktop' });
     assert(
       res.state === 'ERROR' && Boolean(res.failureReasons) && Boolean(res.recommendedCorrectiveActions),
       'Structured error response contains runId, state, failureReasons, and recommendedCorrectiveActions'

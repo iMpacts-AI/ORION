@@ -20,7 +20,7 @@ async function runTitanIntegrationPhase2ATests() {
     }
   }
 
-  const titanRootDir = 'C:\\Users\\smsaq\\Project_Titan';
+  const titanRootDir = (process.env.ORION_TITAN_WORKSPACE || 'C:\\Users\\operator\\Project_Titan');
 
   // 1. Tool Registration Verification
   {
@@ -66,12 +66,12 @@ async function runTitanIntegrationPhase2ATests() {
 
   // 4. Missing Script Handling
   {
-    const provider = new TitanToolProvider('C:\\Users\\smsaq\\Project_Titan');
+    const provider = new TitanToolProvider((process.env.ORION_TITAN_WORKSPACE || 'C:\\Users\\operator\\Project_Titan'));
     const fakeCall = {
       id: 'test_missing',
       toolId: 'titan.generate_visual_plan',
       toolName: 'Titan Visual Plan',
-      arguments: { titanPath: 'C:\\Users\\smsaq\\Downloads' },
+      arguments: { titanPath: 'C:\\Users\\operator\\Downloads' },
       timestamp: Date.now(),
       requiresUserApproval: false
     };

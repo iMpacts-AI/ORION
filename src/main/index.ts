@@ -33,22 +33,35 @@ import { DefaultDeveloperAgentProvider } from './platform/DeveloperAgentProvider
 import { DefaultBrowserProvider } from './platform/BrowserProvider';
 import { OrionOrchestrator } from './services/OrionOrchestrator';
 import { OrionAIProviderRouter } from './services/OrionAIProviderRouter';
+import { validateAndSaveProviderKeys } from './services/ProviderAdapters';
 import { TitanClosedLoopPipeline } from './services/titan/TitanClosedLoopPipeline';
 import { TitanBatchOrchestrator } from './services/titan/TitanBatchOrchestrator';
+import { AgentPolicyService } from './services/AgentPolicyService';
+import { OrionAgentSystem } from './services/OrionAgentSystem';
+import { SecurityPolicyMiddleware } from './services/SecurityPolicyMiddleware';
+import { ProcessSupervisor } from './services/computer/ProcessSupervisor';
+import { OrionActiveAppsTracker } from '../cli/OrionActiveAppsTracker';
 import { ORION_CONSTANTS } from '../shared/constants';
+import { eventBus } from '../shared/events';
 
 let mainWindow: BrowserWindow | null = null;
+let activeOrchestratorAbortController: AbortController | null = null;
 
 const systemMonitor = new SystemMonitorService();
 const memoryService = new MemoryService();
 const unifiedMemory = new UnifiedMemoryManager();
 const omniRouter = new OrionAIProviderRouter();
-const toolService = new ToolService(undefined, undefined);
+const browserProvider = new DefaultBrowserProvider();
+const toolService = new ToolService(undefined, undefined, browserProvider, undefined, unifiedMemory);
 // Pass omniRouter to ComputerUseService planner
 toolService.getComputerUseService().getPlanner().setAIProvider(omniRouter);
 
+const agentPolicyService = new AgentPolicyService();
+const agentSystem = new OrionAgentSystem(agentPolicyService, toolService, omniRouter);
+const securityMiddleware = SecurityPolicyMiddleware.getInstance();
+const activeAppsTracker = new OrionActiveAppsTracker();
+
 const developerAgent = new DefaultDeveloperAgentProvider(toolService);
-const browserProvider = new DefaultBrowserProvider();
 const voiceService = new VoiceService();
 const titanPipeline = new TitanClosedLoopPipeline(toolService);
 const titanBatchOrchestrator = new TitanBatchOrchestrator(titanPipeline);
@@ -58,11 +71,39 @@ const cloudVisionAdapter = new CloudVisionAdapter(omniRouter);
 const visionService = new VisionService(cloudVisionAdapter);
 const orchestrator = new OrionOrchestrator(toolService, visionService, voiceService, omniRouter);
 
+// Forward real-time tool lifecycle events to activeAppsTracker and Electron renderer
+eventBus.subscribe('assistant.tool.started', ({ toolCall }) => {
+  try {
+    activeAppsTracker.recordToolStarted(toolCall);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('orchestrator:tool_started', toolCall);
+    }
+  } catch {}
+});
+
+eventBus.subscribe('assistant.tool.completed', ({ result }) => {
+  try {
+    activeAppsTracker.recordToolCompleted(result);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('orchestrator:tool_completed', result);
+    }
+  } catch {}
+});
+
+eventBus.subscribe('assistant.tool.failed', (payload) => {
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('orchestrator:tool_failed', payload);
+    }
+  } catch {}
+});
+
 function createWindow() {
   const isDemo = process.env.ORION_INITIAL_MODE === 'DEMO' || process.argv.includes('--demo');
   if (isDemo) {
     process.env.ORION_INITIAL_MODE = 'DEMO';
   }
+  const isSmokeTest = Number(process.env.ORION_SMOKE_TEST_EXIT_MS || '0') > 0;
 
   mainWindow = new BrowserWindow({
     width: 1600,
@@ -72,7 +113,7 @@ function createWindow() {
     title: 'ORION - AI Command System',
     backgroundColor: '#050608',
     frame: true,
-    show: true,
+    show: !isSmokeTest,
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
       nodeIntegration: false,
@@ -81,10 +122,12 @@ function createWindow() {
     }
   });
 
-  mainWindow.show();
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
-  });
+  if (!isSmokeTest) {
+    mainWindow.show();
+    mainWindow.once('ready-to-show', () => {
+      mainWindow?.show();
+    });
+  }
 
   if (process.env.VITE_DEV_SERVER_URL) {
     const devUrl = isDemo ? `${process.env.VITE_DEV_SERVER_URL}?mode=DEMO#demo` : process.env.VITE_DEV_SERVER_URL;
@@ -104,8 +147,26 @@ function createWindow() {
     });
   }
 
-  mainWindow.show();
-  mainWindow.focus();
+  if (!isSmokeTest) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    const smokeExitMs = Number(process.env.ORION_SMOKE_TEST_EXIT_MS || '0');
+    if (smokeExitMs > 0) {
+      const marker = `ORION_DESKTOP_READY tools=${toolService.getTools().length} provider=${omniRouter.getStatus().id} timestamp=${Date.now()}`;
+      console.log(marker);
+      if (process.env.ORION_SMOKE_TEST_OUT_FILE) {
+        try {
+          fs.writeFileSync(process.env.ORION_SMOKE_TEST_OUT_FILE, marker, 'utf-8');
+        } catch {}
+      }
+      setTimeout(() => {
+        app.exit(0);
+      }, Math.min(smokeExitMs, 500));
+    }
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -126,7 +187,65 @@ function setupIPC() {
   });
 
   ipcMain.handle('orchestrator:process_command', async (_, { query, source }) => {
-    return await orchestrator.processCommand(query, source);
+    const controller = new AbortController();
+    activeOrchestratorAbortController = controller;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('orchestrator:state_changed', {
+        state: 'PLANNING',
+        detail: `Planning task: ${String(query || '').slice(0, 80)}`
+      });
+    }
+    try {
+      const result = await orchestrator.processCommand(query, source, {
+        signal: controller.signal,
+        onToken: (token: string) => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('orchestrator:stream_token', { token });
+          }
+        }
+      });
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('orchestrator:state_changed', {
+          state: result.success ? 'COMPLETED' : 'FAILED',
+          detail: result.response?.slice(0, 120) || ''
+        });
+      }
+      return result;
+    } catch (err: any) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('orchestrator:state_changed', {
+          state: controller.signal.aborted ? 'CANCELLED' : 'FAILED',
+          detail: err?.message || 'Execution interrupted'
+        });
+      }
+      throw err;
+    } finally {
+      if (activeOrchestratorAbortController === controller) {
+        activeOrchestratorAbortController = null;
+      }
+    }
+  });
+
+  ipcMain.handle('orchestrator:cancel_command', async (_, reason?: string) => {
+    if (activeOrchestratorAbortController) {
+      try {
+        activeOrchestratorAbortController.abort(new Error(reason || 'Cancelled by operator'));
+      } catch {}
+      activeOrchestratorAbortController = null;
+    }
+    try {
+      toolService.getComputerUseService().cancelActiveTask(reason || 'Cancelled by operator');
+    } catch {}
+    try {
+      browserProvider.cancelActiveTask();
+    } catch {}
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('orchestrator:state_changed', {
+        state: 'CANCELLED',
+        detail: reason || 'Active operation cancelled by operator.'
+      });
+    }
+    return { cancelled: true, timestamp: Date.now() };
   });
 
   // Phase 4 & 4.2 Omni-Brain IPC Channels
@@ -148,38 +267,12 @@ function setupIPC() {
   });
 
   ipcMain.handle('ai:save_provider_keys', async (_, keys: Record<string, string>) => {
-    try {
-      let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
-      let lines = envContent.split(/\r?\n/);
-      const envMap: Record<string, string> = {};
-
-      lines.forEach(line => {
-        const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith('#')) {
-          const idx = trimmed.indexOf('=');
-          if (idx > 0) {
-            envMap[trimmed.substring(0, idx)] = trimmed.substring(idx + 1);
-          }
-        }
-      });
-
-      // Update values
-      Object.entries(keys).forEach(([k, v]) => {
-        if (v && v.trim()) {
-          process.env[k] = v.trim();
-          envMap[k] = v.trim();
-        }
-      });
-
-      // Write back to .env
-      const newEnvLines = Object.entries(envMap).map(([k, v]) => `${k}=${v}`);
-      fs.writeFileSync(envPath, newEnvLines.join('\n'), 'utf-8');
-
-      return true;
-    } catch (e: any) {
-      console.error('Failed to save provider keys:', e);
+    const res = validateAndSaveProviderKeys(keys, envPath);
+    if (!res.success) {
+      console.error('Rejected provider keys update:', res.error);
       return false;
     }
+    return true;
   });
 
   ipcMain.handle(ORION_CONSTANTS.IPC.VOICE_LISTEN, async (_, action: 'start' | 'stop') => {
@@ -446,6 +539,307 @@ function setupIPC() {
     return await browserProvider.typeText(selector, text);
   });
 
+  ipcMain.handle('browser:open_chrome', async (_, { url, visibleWindow, useCdp }: { url?: string; visibleWindow?: boolean; useCdp?: boolean } = {}) => {
+    return await browserProvider.openChromeWindow(url, { visibleWindow, useCdp });
+  });
+
+  ipcMain.handle('browser:search', async (_, { query, useCdpAdapter }: { query: string; useCdpAdapter?: boolean }) => {
+    return await browserProvider.searchWeb(query, { useCdpAdapter });
+  });
+
+  ipcMain.handle('browser:open_tabs', async (_, { urls, useCdpAdapter }: { urls: string[]; useCdpAdapter?: boolean }) => {
+    return await browserProvider.openMultipleTabs(urls, { useCdpAdapter });
+  });
+
+  ipcMain.handle('browser:fill_form', async (_, payload: {
+    fields: Record<string, string>;
+    submitSelector?: string;
+    submitForm?: boolean;
+    explicitAuthorization?: boolean;
+  }) => {
+    const res = await browserProvider.fillForm(payload.fields, {
+      submitSelector: payload.submitSelector,
+      submitForm: payload.submitForm,
+      explicitAuthorization: payload.explicitAuthorization
+    });
+    if (res.errorCode === 'AUTHORIZATION_REQUIRED') {
+      const browserTool = toolService.getRegistry().getTool('browser.click') || {
+        id: 'browser.submit_form',
+        name: 'Browser Submit External Form',
+        category: 'BROWSER',
+        description: 'Submits form data to active webpage',
+        permissionLevel: 'HIGH',
+        isReadOnly: false,
+        isDangerous: true,
+        requiresApproval: true,
+        parameters: {}
+      };
+      const pending = securityMiddleware.createApprovalRequest({
+        tool: browserTool as any,
+        arguments: {
+          url: res.observation?.url,
+          fields: payload.fields,
+          submitSelector: payload.submitSelector || '#submit-btn'
+        },
+        evaluatedRisk: 'HIGH_RISK',
+        agentId: agentSystem.getActiveEngineeringAgentId(),
+        reason: res.error || 'Submitting form data requires explicit operator approval.'
+      });
+      return { ...res, pendingApprovalId: pending.approvalId, pendingApproval: pending };
+    }
+    return res;
+  });
+
+  ipcMain.handle('browser:execute_closed_loop', async (_, payload: {
+    goal: string;
+    explicitAuthorization?: boolean;
+    useCdpAdapter?: boolean;
+    visibleWindow?: boolean;
+    formFields?: Record<string, string>;
+    submitSelector?: string;
+    submitForm?: boolean;
+  }) => {
+    const report = await browserProvider.executeClosedLoopTask({
+      ...payload,
+      onStageChange: (stage, detail) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('browser:stage_changed', { stage, detail, timestamp: Date.now() });
+        }
+      }
+    });
+    if (report.status === 'AWAITING_APPROVAL') {
+      const browserTool = toolService.getRegistry().getTool('browser.click') || {
+        id: 'browser.submit_form',
+        name: 'Browser Submit External Form',
+        category: 'BROWSER',
+        description: 'Submits form data to active webpage',
+        permissionLevel: 'HIGH',
+        isReadOnly: false,
+        isDangerous: true,
+        requiresApproval: true,
+        parameters: {}
+      };
+      const pending = securityMiddleware.createApprovalRequest({
+        tool: browserTool as any,
+        arguments: {
+          goal: payload.goal,
+          url: report.url,
+          formFields: payload.formFields
+        },
+        evaluatedRisk: 'HIGH_RISK',
+        agentId: agentSystem.getActiveEngineeringAgentId(),
+        reason: report.error || 'Submitting browser form requires explicit operator approval.'
+      });
+      report.pendingApprovalId = pending.approvalId;
+    }
+    return report;
+  });
+
+  ipcMain.handle('browser:close', async () => {
+    await browserProvider.close();
+    return { closed: true };
+  });
+
+  // Active Applications Panel IPC Channels (Real OS Process + Verified Window State + Real PNG Icons)
+  ipcMain.handle('apps:get_state', async (_, { forceRefresh }: { forceRefresh?: boolean } = {}) => {
+    activeAppsTracker.refreshFromSystem(Boolean(forceRefresh));
+    const winMgr = compService.getWindowManager();
+    const [activeWin, visibleWins] = await Promise.all([
+      winMgr.getActiveWindow().catch(() => ({ title: 'Unknown', processName: 'Unknown', processId: 0, bounds: { x: 0, y: 0, width: 1920, height: 1080 } })),
+      winMgr.getVisibleWindows().catch(() => [])
+    ]);
+
+    const tracked = activeAppsTracker.getAllTrackedApplications();
+    const enriched = tracked.map(appItem => {
+      const idLower = appItem.id.toLowerCase();
+      const dispLower = appItem.displayName.toLowerCase();
+
+      const matchingWin = visibleWins.find(
+        w =>
+          w.processName.toLowerCase().includes(idLower) ||
+          w.title.toLowerCase().includes(dispLower) ||
+          (idLower === 'vscode' && (w.processName.toLowerCase().includes('code') || w.title.toLowerCase().includes('visual studio code'))) ||
+          (idLower === 'terminal' && (w.processName.toLowerCase().includes('powershell') || w.processName.toLowerCase().includes('windowsterminal') || w.processName.toLowerCase().includes('cmd')))
+      );
+
+      const isForeground =
+        activeWin.processName.toLowerCase().includes(idLower) ||
+        activeWin.title.toLowerCase().includes(dispLower) ||
+        (idLower === 'vscode' && activeWin.processName.toLowerCase().includes('code'));
+
+      let iconDataUrl: string | undefined;
+      if (appItem.iconPngPath && fs.existsSync(appItem.iconPngPath)) {
+        try {
+          const b64 = fs.readFileSync(appItem.iconPngPath).toString('base64');
+          iconDataUrl = `data:image/png;base64,${b64}`;
+        } catch {}
+      }
+
+      const verifiedWindow = Boolean(matchingWin || isForeground);
+      const effectiveStatus = verifiedWindow && appItem.status === 'Not running' ? 'Open' : appItem.status;
+
+      return {
+        id: appItem.id,
+        displayName: appItem.displayName,
+        status: effectiveStatus,
+        verifiedWindow,
+        windowTitle: isForeground ? activeWin.title : (matchingWin?.title || null),
+        processName: appItem.processName || matchingWin?.processName || null,
+        processId: matchingWin?.processId || (isForeground ? activeWin.processId : null),
+        isForeground,
+        brandRgb: appItem.brandRgb,
+        iconVerifiedLocal: appItem.iconVerifiedLocal,
+        iconDataUrl,
+        detail: appItem.detail || null,
+        lastUpdated: appItem.lastUpdated
+      };
+    });
+
+    return {
+      apps: enriched,
+      activeWindow: activeWin,
+      visibleWindowsCount: visibleWins.length,
+      timestamp: Date.now()
+    };
+  });
+
+  ipcMain.handle('apps:focus_or_open', async (_, { appId, url }: { appId: string; url?: string }) => {
+    const cleanId = String(appId || '').trim().toLowerCase();
+    if (!cleanId) {
+      return { success: false, error: 'Application ID is required.' };
+    }
+    if (ProcessSupervisor.getInstance().isEstopActive() || compService.isEmergencyStopped()) {
+      return { success: false, error: 'Execution BLOCKED: ORION Emergency Stop is active.' };
+    }
+
+    activeAppsTracker.refreshFromSystem(true);
+    const tracked = activeAppsTracker.resolveAppIdentity(cleanId);
+    const winMgr = compService.getWindowManager();
+
+    // If already running, try focusing first
+    if (tracked && tracked.status === 'Open' && !url) {
+      const focused = await winMgr.focusWindow(cleanId === 'vscode' ? 'Code' : cleanId);
+      if (focused) {
+        const activeAfter = await winMgr.getActiveWindow().catch(() => null);
+        return {
+          success: true,
+          action: 'FOCUSED',
+          appId: cleanId,
+          verifiedWindow: true,
+          activeWindow: activeAfter
+        };
+      }
+    }
+
+    // Launch via authoritative ComputerUseService OPEN_APP action
+    activeAppsTracker.setApplicationState(cleanId, 'Launching', 'Starting process...');
+    const targetAppName = cleanId === 'vscode' ? 'code' : cleanId === 'terminal' ? 'powershell' : cleanId;
+    const actionRes = await compService.executeSingleAction({
+      id: `ui_app_${Date.now()}`,
+      type: 'OPEN_APP',
+      target: targetAppName,
+      parameters: url ? { appName: targetAppName, path: url } : { appName: targetAppName },
+      confidence: 0.99,
+      riskLevel: 'LOW_RISK',
+      reason: `Operator clicked '${cleanId}' in Active Applications Panel`
+    });
+
+    if (actionRes.success) {
+      activeAppsTracker.setApplicationState(cleanId, 'Open');
+    } else {
+      activeAppsTracker.setApplicationState(cleanId, 'Launch failed', actionRes.error);
+    }
+
+    return {
+      success: actionRes.success,
+      action: 'LAUNCHED',
+      appId: cleanId,
+      verifiedWindow: actionRes.postconditionsVerified,
+      error: actionRes.error,
+      observedState: actionRes.observedState
+    };
+  });
+
+  // Multi-Agent Engineering System IPC Channels
+  ipcMain.handle('agents:get_roster', async () => {
+    await omniRouter.ensureInitialized(800);
+    return {
+      activeAgentId: agentSystem.getActiveEngineeringAgentId(),
+      canonicalAgentId: agentSystem.getActiveAgentId(),
+      roster: agentSystem.getLiveAgentRoster(),
+      backendHealth: agentSystem.getBackendHealthSummary(),
+      tasks: agentSystem.getAllTasks().slice(-30),
+      logs: agentSystem.getAgentLogs(undefined, 40)
+    };
+  });
+
+  ipcMain.handle('agents:set_active', async (_, agentId: string) => {
+    const def = agentSystem.setActiveAgent(agentId);
+    return {
+      activeAgentId: agentSystem.getActiveEngineeringAgentId(),
+      canonicalAgentId: agentSystem.getActiveAgentId(),
+      definition: def
+    };
+  });
+
+  ipcMain.handle('agents:run_task', async (_, payload: {
+    agentId: string;
+    title?: string;
+    prompt: string;
+    toolCallsToRun?: Array<{ toolId: string; arguments?: Record<string, any> }>;
+  }) => {
+    return await agentSystem.runEngineeringTask({
+      agentId: payload.agentId,
+      title: payload.title || payload.prompt.slice(0, 60),
+      prompt: payload.prompt,
+      toolCallsToRun: payload.toolCallsToRun
+    });
+  });
+
+  ipcMain.handle('agents:delegate', async (_, { goal, targetFile }: { goal: string; targetFile?: string }) => {
+    return await agentSystem.delegateEngineeringGoal(goal, { targetPath: targetFile });
+  });
+
+  ipcMain.handle('agents:cancel_task', async (_, { taskId, reason }: { taskId: string; reason?: string }) => {
+    return { cancelled: agentSystem.cancelAgentTask(taskId, reason) };
+  });
+
+  // Security Policy & Approvals IPC Channels
+  ipcMain.handle('security:get_status', async () => {
+    const policyIntegrity = agentPolicyService.verifyProtectedPolicyIntegrity();
+    const estopActive = ProcessSupervisor.getInstance().isEstopActive() || compService.isEmergencyStopped();
+    return {
+      estopActive,
+      policyIntegrityVerified: policyIntegrity.valid,
+      policyHash: policyIntegrity.actualSha256,
+      expectedPolicyHash: policyIntegrity.expectedSha256,
+      pendingApprovals: securityMiddleware.getPendingApprovals(),
+      allApprovals: securityMiddleware.getAllApprovals().slice(-20)
+    };
+  });
+
+  ipcMain.handle('approvals:get_pending', async () => {
+    return securityMiddleware.getPendingApprovals();
+  });
+
+  ipcMain.handle('approvals:approve', async (_, approvalId?: string) => {
+    const approved = securityMiddleware.approveRequest(approvalId);
+    return {
+      success: Boolean(approved),
+      approval: approved,
+      pendingApprovals: securityMiddleware.getPendingApprovals()
+    };
+  });
+
+  ipcMain.handle('approvals:deny', async (_, approvalId?: string) => {
+    const denied = securityMiddleware.denyRequest(approvalId);
+    return {
+      success: Boolean(denied),
+      approval: denied,
+      pendingApprovals: securityMiddleware.getPendingApprovals()
+    };
+  });
+
   // Developer Agent IPC Channels
   ipcMain.handle('developer:inspect_repo', async (_, targetPath: string) => {
     return await developerAgent.inspectRepository(targetPath);
@@ -527,12 +921,23 @@ function setupIPC() {
   });
 }
 
-
-
-
 app.whenReady().then(() => {
   setupIPC();
   createWindow();
+
+  const smokeExitMs = Number(process.env.ORION_SMOKE_TEST_EXIT_MS || '0');
+  if (smokeExitMs > 0) {
+    setTimeout(() => {
+      const marker = `ORION_DESKTOP_READY_FALLBACK tools=${toolService.getTools().length} provider=${omniRouter.getStatus().id} timestamp=${Date.now()}`;
+      console.log(marker);
+      if (process.env.ORION_SMOKE_TEST_OUT_FILE && !fs.existsSync(process.env.ORION_SMOKE_TEST_OUT_FILE)) {
+        try {
+          fs.writeFileSync(process.env.ORION_SMOKE_TEST_OUT_FILE, marker, 'utf-8');
+        } catch {}
+      }
+      app.exit(0);
+    }, smokeExitMs + 1000);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

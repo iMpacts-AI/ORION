@@ -27,7 +27,7 @@ export class DefaultDeveloperAgentProvider implements IDeveloperAgentProvider {
       try {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
-          if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === 'dist-electron' || entry.name === 'release') {
+          if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.orion_memory' || entry.name === 'dist' || entry.name === 'dist-electron' || entry.name === 'release') {
             continue;
           }
           const full = path.join(dir, entry.name);
@@ -72,11 +72,18 @@ export class DefaultDeveloperAgentProvider implements IDeveloperAgentProvider {
     const searchableExtensions = ['.ts', '.tsx', '.js', '.jsx', '.json', '.md', '.py', '.html', '.css'];
 
     const searchWalk = (dir: string, depth = 0) => {
-      if (depth > 5 || results.length >= 100) return;
+      if (depth > 6 || results.length >= 300) return;
       try {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
-          if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist' || entry.name === 'dist-electron' || entry.name === 'release') {
+          if (
+            entry.name === 'node_modules' ||
+            entry.name === '.git' ||
+            entry.name === '.orion_memory' ||
+            entry.name === 'dist' ||
+            entry.name === 'dist-electron' ||
+            entry.name === 'release'
+          ) {
             continue;
           }
           const fullPath = path.join(dir, entry.name);
@@ -86,7 +93,7 @@ export class DefaultDeveloperAgentProvider implements IDeveloperAgentProvider {
             const content = fs.readFileSync(fullPath, 'utf-8');
             const lines = content.split('\n');
             lines.forEach((line, idx) => {
-              if (line.toLowerCase().includes(query.toLowerCase()) && results.length < 100) {
+              if (line.toLowerCase().includes(query.toLowerCase()) && results.length < 300) {
                 results.push({
                   filePath: fullPath,
                   lineNumber: idx + 1,
@@ -106,7 +113,7 @@ export class DefaultDeveloperAgentProvider implements IDeveloperAgentProvider {
   public async executeBuild(targetPath: string, command: string): Promise<BuildExecutionResult> {
     const startTime = Date.now();
     const resolvedPath = path.resolve(targetPath);
-    
+
     // Disallow shell chaining operators
     if (/[&|;`$\r\n]/.test(command)) {
       return {
@@ -161,7 +168,7 @@ export class DefaultDeveloperAgentProvider implements IDeveloperAgentProvider {
         command,
         success: false,
         exitCode: 1,
-        output: `Execution error: ${err.message}`,
+        output: `Execution failed: ${err.message}`,
         durationMs: Date.now() - startTime
       };
     }

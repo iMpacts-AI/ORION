@@ -26,35 +26,7 @@ export class ComputerActionPlanner {
     // Redact any potential credentials in stored logs / command representation
     const sanitizedCommand = naturalLanguageCommand.replace(/(password|token|secret|key|bearer)[\s:=]+([^\s,;]+)/gi, '$1: ***REDACTED***');
 
-    // Attempt AI LLM Planning if configured provider exists
-    if (this.aiProvider && this.aiProvider.isConfigured && this.aiProvider.id !== 'local-heuristic') {
-      try {
-        const prompt = `You are ORION Desktop Action Planner. Decompose this user command into an array of actions.
-Valid Action Types: OPEN_APP, FOCUS_WINDOW, CLOSE_WINDOW, MOUSE_CLICK, KEYBOARD_INPUT, HOTKEY, SCROLL, OBSERVE_SCREEN, WAIT.
-Return a valid JSON array of objects with keys: "type", "target" (optional), "parameters" (optional: {appName, text, keys, amount, button}), "reason".
-Command: "${naturalLanguageCommand}"`;
-        const response = await this.aiProvider.chat(prompt);
-        const jsonMatch = response.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            actions = parsed.map((item: any, idx: number) => ({
-              id: `act_${Date.now()}_${idx + 1}`,
-              type: item.type || 'OBSERVE_SCREEN',
-              target: item.target,
-              parameters: item.parameters || {},
-              confidence: 0.95,
-              riskLevel: 'LOW_RISK',
-              reason: item.reason || `AI planned step ${idx + 1}: ${item.type}`
-            }));
-          }
-        }
-      } catch (e) {
-        // Fall back to deterministic decomposition
-      }
-    }
-
-    // Deterministic Rule-Based Fallback Decomposition
+    // Deterministic Rule-Based Fast-Path Decomposition (0ms latency + strict postconditions)
     if (actions.length === 0) {
       if (
         ((commandLower.includes('open') || commandLower.includes('focus')) && (commandLower.includes('type') || commandLower.includes('write')) && (commandLower.includes('close') || commandLower.includes('verify') || commandLower.includes('replace') || commandLower.includes('observe'))) ||
@@ -154,61 +126,94 @@ Command: "${naturalLanguageCommand}"`;
     }
 
     // 1. Browser & Navigation Commands
-    else if (commandLower.includes('open chrome') || commandLower.includes('search for') || commandLower.includes('open browser') || commandLower.includes('go to ') || commandLower.includes('visit ')) {
-      actions.push({
-        id: `act_${Date.now()}_1`,
-        type: 'OPEN_APP',
-        target: 'chrome',
-        parameters: { appName: 'chrome' },
-        confidence: 0.95,
-        riskLevel: 'MODERATE_RISK',
-        reason: 'Launch Google Chrome browser'
-      });
-
+    else if (commandLower.includes('open chrome') || commandLower.includes('launch chrome') || commandLower.includes('search for') || commandLower.includes('open browser') || commandLower.includes('go to ') || commandLower.includes('visit ') || /open\s+https?:\/\//i.test(naturalLanguageCommand)) {
       const urlMatch = naturalLanguageCommand.match(/(?:go to|visit|navigate to|open)\s+(https?:\/\/[^\s]+|[a-zA-Z0-9\-_]+\.(?:com|org|net|ai|io|ae|edu)[^\s]*)/i);
       const searchMatch = naturalLanguageCommand.match(/search (?:for )?["']?([^"']+)["']?/i);
-      let targetUrl = 'https://www.google.com';
+      let targetUrl: string | undefined;
+      let inputPayload: string | undefined;
 
       if (urlMatch) {
-        let raw = urlMatch[1].trim();
+        let raw = urlMatch[1].trim().replace(/[.,;]+$/, '');
         if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
           raw = 'https://' + raw;
         }
         targetUrl = raw;
+        inputPayload = raw;
       } else if (searchMatch) {
-        targetUrl = `https://www.google.com/search?q=${encodeURIComponent(searchMatch[1].trim())}`;
+        const cleanQuery = searchMatch[1].trim().replace(/[.,;]+$/, '');
+        targetUrl = `https://www.google.com/search?q=${encodeURIComponent(cleanQuery)}`;
+        inputPayload = cleanQuery;
       } else {
-        const query = naturalLanguageCommand.replace(/(?:open chrome|open browser|and|search for)\s*/gi, '').trim();
-        if (query) {
+        const query = naturalLanguageCommand
+          .replace(/(?:open|launch|start)\s+(?:google\s+)?(?:chrome|browser)[.!?\s]*/gi, '')
+          .replace(/^(?:and|to|please)\s+/i, '')
+          .trim();
+        if (query && query.length > 2) {
           targetUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+          inputPayload = query;
         }
       }
 
       actions.push({
+        id: `act_${Date.now()}_1`,
+        type: 'OPEN_APP',
+        target: 'chrome',
+        parameters: targetUrl ? { appName: 'chrome', path: targetUrl } : { appName: 'chrome' },
+        confidence: 0.98,
+        riskLevel: 'LOW_RISK',
+        reason: targetUrl ? `Launch Google Chrome and navigate to ${targetUrl}` : 'Launch Google Chrome browser',
+        postconditions: {
+          verifyActiveApp: 'chrome'
+        }
+      });
+
+      actions.push({
         id: `act_${Date.now()}_2`,
-        type: 'MOUSE_CLICK',
-        selector: { role: 'input', text: 'Address and search bar' },
-        confidence: 0.9,
-        riskLevel: 'MODERATE_RISK',
-        reason: 'Focus browser URL / Search address bar'
+        type: 'FOCUS_WINDOW',
+        target: 'chrome',
+        confidence: 0.98,
+        riskLevel: 'LOW_RISK',
+        reason: 'Bring Google Chrome window to the foreground',
+        postconditions: {
+          verifyActiveWindow: 'chrome'
+        }
       });
 
-      actions.push({
-        id: `act_${Date.now()}_3`,
-        type: 'KEYBOARD_INPUT',
-        parameters: { text: targetUrl },
-        confidence: 0.95,
-        riskLevel: 'MODERATE_RISK',
-        reason: `Type target navigation URL: ${targetUrl}`
-      });
+      if (inputPayload) {
+        actions.push({
+          id: `act_${Date.now()}_3`,
+          type: 'HOTKEY',
+          parameters: { keys: ['control', 'l'] },
+          confidence: 0.95,
+          riskLevel: 'LOW_RISK',
+          reason: 'Focus Chrome address bar via Ctrl+L'
+        });
+
+        actions.push({
+          id: `act_${Date.now()}_4`,
+          type: 'KEYBOARD_INPUT',
+          parameters: { text: inputPayload },
+          confidence: 0.95,
+          riskLevel: 'LOW_RISK',
+          reason: `Enter browser target or search query: ${inputPayload}`
+        });
+
+        actions.push({
+          id: `act_${Date.now()}_5`,
+          type: 'PRESS_KEY',
+          parameters: { key: 'Enter' },
+          confidence: 0.95,
+          riskLevel: 'LOW_RISK',
+          reason: 'Submit browser navigation or search'
+        });
+      }
 
       actions.push({
-        id: `act_${Date.now()}_4`,
-        type: 'PRESS_KEY',
-        parameters: { key: 'enter' },
-        confidence: 0.95,
-        riskLevel: 'MODERATE_RISK',
-        reason: 'Submit search and navigate'
+        id: `act_${Date.now()}_${inputPayload ? 6 : 3}`,
+        type: 'OBSERVE_SCREEN',
+        confidence: 0.98,
+        riskLevel: 'READ_ONLY',
+        reason: 'Verify Google Chrome window is active and visible on desktop'
       });
     }
 
@@ -235,7 +240,7 @@ Command: "${naturalLanguageCommand}"`;
       });
     }
 
-    // 2B. Direct Application Launching (Notepad, Calculator, Terminal, Code, Explorer, etc.)
+    // 2B. Direct Application Launching (40+ Windows Apps + Typo-Tolerant Open Triggers)
     else if (
       commandLower.includes('open notepad') ||
       commandLower.includes('launch notepad') ||
@@ -247,7 +252,10 @@ Command: "${naturalLanguageCommand}"`;
       commandLower.includes('open paint') ||
       commandLower.includes('open task manager') ||
       commandLower.startsWith('open ') ||
+      commandLower.startsWith('oprn ') ||
+      commandLower.startsWith('opne ') ||
       commandLower.startsWith('launch ') ||
+      commandLower.startsWith('lunach ') ||
       commandLower.startsWith('start ') ||
       commandLower.includes('try and open')
     ) {
@@ -255,6 +263,8 @@ Command: "${naturalLanguageCommand}"`;
       if (commandLower.includes('notepad')) appName = 'notepad';
       else if (commandLower.includes('calc')) appName = 'calc';
       else if (commandLower.includes('chrome')) appName = 'chrome';
+      else if (commandLower.includes('brave')) appName = 'brave';
+      else if (commandLower.includes('firefox')) appName = 'firefox';
       else if (commandLower.includes('code') || commandLower.includes('vscode')) appName = 'code';
       else if (commandLower.includes('explorer') || commandLower.includes('files') || commandLower.includes('folder')) appName = 'explorer';
       else if (commandLower.includes('cmd') || commandLower.includes('command prompt')) appName = 'cmd';
@@ -262,8 +272,31 @@ Command: "${naturalLanguageCommand}"`;
       else if (commandLower.includes('paint') || commandLower.includes('mspaint')) appName = 'paint';
       else if (commandLower.includes('taskmgr') || commandLower.includes('task manager')) appName = 'taskmgr';
       else if (commandLower.includes('edge')) appName = 'edge';
+      else if (commandLower.includes('spotify')) appName = 'spotify';
+      else if (commandLower.includes('vlc')) appName = 'vlc';
+      else if (commandLower.includes('word') || commandLower.includes('winword')) appName = 'winword';
+      else if (commandLower.includes('excel')) appName = 'excel';
+      else if (commandLower.includes('powerpoint') || commandLower.includes('powerpnt')) appName = 'powerpnt';
+      else if (commandLower.includes('outlook')) appName = 'outlook';
+      else if (commandLower.includes('onenote')) appName = 'onenote';
+      else if (commandLower.includes('teams')) appName = 'teams';
+      else if (commandLower.includes('discord')) appName = 'discord';
+      else if (commandLower.includes('slack')) appName = 'slack';
+      else if (commandLower.includes('zoom')) appName = 'zoom';
+      else if (commandLower.includes('whatsapp')) appName = 'whatsapp';
+      else if (commandLower.includes('telegram')) appName = 'telegram';
+      else if (commandLower.includes('obs')) appName = 'obs64';
+      else if (commandLower.includes('steam')) appName = 'steam';
+      else if (commandLower.includes('notion')) appName = 'notion';
+      else if (commandLower.includes('figma')) appName = 'figma';
+      else if (commandLower.includes('postman')) appName = 'postman';
+      else if (commandLower.includes('blender')) appName = 'blender';
+      else if (commandLower.includes('audacity')) appName = 'audacity';
+      else if (commandLower.includes('snipping')) appName = 'snippingtool';
+      else if (commandLower.includes('settings')) appName = 'ms-settings:';
+      else if (commandLower.includes('control panel')) appName = 'control';
       else {
-        const appMatch = naturalLanguageCommand.match(/(?:open|launch|start|focus)\s+(?:the\s+)?([a-zA-Z0-9_\-]+)/i);
+        const appMatch = naturalLanguageCommand.match(/(?:open|oprn|opne|launch|lunach|start|focus)\s+(?:the\s+)?([a-zA-Z0-9_\-]+)/i);
         if (appMatch) appName = appMatch[1].trim().toLowerCase();
       }
 
@@ -498,15 +531,43 @@ Command: "${naturalLanguageCommand}"`;
       });
     }
 
-    // Generic fallback single observation
+    // Generic fallback: attempt AI LLM planning before defaulting to single observation
     else {
-      actions.push({
-        id: `act_${Date.now()}_1`,
-        type: 'OBSERVE_SCREEN',
-        confidence: 0.8,
-        riskLevel: 'READ_ONLY',
-        reason: `General screen observation for command: ${naturalLanguageCommand}`
-      });
+      if (this.aiProvider && this.aiProvider.isConfigured && this.aiProvider.id !== 'local-heuristic') {
+        try {
+          const prompt = `You are ORION Desktop Action Planner. Decompose this user command into an array of actions.
+Valid Action Types: OPEN_APP, FOCUS_WINDOW, CLOSE_WINDOW, MOUSE_CLICK, KEYBOARD_INPUT, HOTKEY, SCROLL, OBSERVE_SCREEN, WAIT.
+Return a valid JSON array of objects with keys: "type", "target" (optional), "parameters" (optional: {appName, text, keys, amount, button}), "reason".
+Command: "${naturalLanguageCommand}"`;
+          const response = await this.aiProvider.chat(prompt);
+          const jsonMatch = response.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              actions = parsed.map((item: any, idx: number) => ({
+                id: `act_${Date.now()}_${idx + 1}`,
+                type: item.type || 'OBSERVE_SCREEN',
+                target: item.target,
+                parameters: item.parameters || {},
+                confidence: 0.95,
+                riskLevel: 'LOW_RISK',
+                reason: item.reason || `AI planned step ${idx + 1}: ${item.type}`
+              }));
+            }
+          }
+        } catch {
+          // Fall back to single observation
+        }
+      }
+      if (actions.length === 0) {
+        actions.push({
+          id: `act_${Date.now()}_1`,
+          type: 'OBSERVE_SCREEN',
+          confidence: 0.8,
+          riskLevel: 'READ_ONLY',
+          reason: `General screen observation for command: ${naturalLanguageCommand}`
+        });
+      }
     }
     }
 
@@ -516,7 +577,7 @@ Command: "${naturalLanguageCommand}"`;
       if (isDryRun) {
         act.isDryRun = true;
       }
-      const risk = this.riskEvaluator.evaluateRisk(act.type, act.payload || act.parameters);
+      const risk = this.riskEvaluator.evaluateRisk(act.type, act.payload, act.parameters, act.target);
       act.riskLevel = risk;
       if (risk === 'CRITICAL') overallRisk = 'CRITICAL';
       else if (risk === 'HIGH_RISK' && overallRisk !== 'CRITICAL') overallRisk = 'HIGH_RISK';

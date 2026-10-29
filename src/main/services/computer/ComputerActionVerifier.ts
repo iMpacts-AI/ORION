@@ -1,4 +1,4 @@
-import { ComputerAction, ActionResult, ComputerObservation } from '../../../shared/types/action';
+import { ComputerAction, ComputerObservation } from '../../../shared/types/action';
 import { ActionValidator } from '../ActionValidator';
 
 export class ComputerActionVerifier {
@@ -29,23 +29,67 @@ export class ComputerActionVerifier {
     switch (action.type) {
       case 'OPEN_APP':
       case 'FOCUS_WINDOW': {
-        const expected = (action.target || action.payload?.appName || '').toLowerCase();
-        const activeTitle = postObservation.activeWindow.title.toLowerCase();
-        const activeProc = postObservation.activeWindow.processName.toLowerCase();
-        if (expected && !activeTitle.includes(expected) && !activeProc.includes(expected)) {
+        const rawExpected = String(
+          action.target ||
+          action.payload?.appName ||
+          action.parameters?.appName ||
+          action.parameters?.title ||
+          ''
+        )
+          .toLowerCase()
+          .replace(/\.exe$/i, '')
+          .trim();
+
+        const resolvedDisplay = String(action.parameters?._resolvedDisplayName || '')
+          .toLowerCase()
+          .trim();
+        const resolvedProcs: string[] = Array.isArray(action.parameters?._resolvedProcessNames)
+          ? action.parameters!._resolvedProcessNames.map((p: any) =>
+              String(p || '').toLowerCase().replace(/\.exe$/i, '').trim()
+            )
+          : [];
+
+        const candidates = Array.from(
+          new Set([rawExpected, resolvedDisplay, ...resolvedProcs].filter(Boolean))
+        );
+
+        const activeTitle = (postObservation.activeWindow?.title || '').toLowerCase();
+        const activeProc = (postObservation.activeWindow?.processName || '')
+          .toLowerCase()
+          .replace(/\.exe$/i, '');
+
+        const matchesActive =
+          candidates.length === 0 ||
+          candidates.some(
+            c =>
+              activeTitle.includes(c) ||
+              activeProc.includes(c) ||
+              (c.length >= 3 && activeProc === c)
+          );
+
+        const visibleMatch =
+          candidates.length > 0 && Array.isArray((postObservation as any).visibleWindows)
+            ? (postObservation as any).visibleWindows.some((w: any) => {
+                const wTitle = (w?.title || '').toLowerCase();
+                const wProc = (w?.processName || '').toLowerCase().replace(/\.exe$/i, '');
+                return candidates.some(c => wTitle.includes(c) || wProc.includes(c));
+              })
+            : false;
+
+        if (!matchesActive && !(action.type === 'OPEN_APP' && visibleMatch)) {
           return {
             verified: false,
             confidence: 0.4,
-            reason: `Target window '${expected}' did not become active (current: '${postObservation.activeWindow.title}').`
+            reason: `Target window '${resolvedDisplay || rawExpected}' did not become active or visible (current: '${postObservation.activeWindow?.title || 'Unknown'}').`
           };
         }
         return { verified: true, confidence: 0.95 };
       }
 
       case 'CLOSE_WINDOW': {
-        const target = (action.target || '').toLowerCase();
-        const stillActive = postObservation.activeWindow.title.toLowerCase().includes(target);
-        if (target && stillActive) {
+        const target = String(action.target || action.parameters?.title || '').toLowerCase().trim();
+        const stillActive = target && (postObservation.activeWindow?.title || '').toLowerCase().includes(target);
+        if (stillActive) {
           return {
             verified: false,
             confidence: 0.3,
@@ -60,7 +104,6 @@ export class ComputerActionVerifier {
       case 'KEYBOARD_INPUT':
       case 'HOTKEY':
       case 'PRESS_KEY': {
-        // Successful execution verified
         return { verified: true, confidence: 0.92 };
       }
 

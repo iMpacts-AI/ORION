@@ -19,7 +19,7 @@ async function runTitanOperatorExperienceTests() {
     }
   }
 
-  const titanRootDir = 'C:\\Users\\smsaq\\Project_Titan';
+  const titanRootDir = (process.env.ORION_TITAN_WORKSPACE || 'C:\\Users\\operator\\Project_Titan');
 
   // 1. Status State Mapping Verification
   {
@@ -145,7 +145,7 @@ async function runTitanOperatorExperienceTests() {
   // 12. Path Traversal Remains Rejected
   {
     const pipeline = new TitanClosedLoopPipeline();
-    const res = await pipeline.executePipeline({ titanRootDir: 'C:\\Users\\smsaq\\..\\Windows' });
+    const res = await pipeline.executePipeline({ titanRootDir: 'C:\\Users\\operator\\..\\Windows' });
     assert(
       res.state === 'ERROR' && Boolean(res.error?.includes('SECURITY VIOLATION')),
       'Path traversal attempts outside Titan root are strictly blocked with security error'

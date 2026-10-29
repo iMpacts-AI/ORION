@@ -22,7 +22,7 @@ async function runTitanIntegrationPhase2BTests() {
     }
   }
 
-  const titanRootDir = 'C:\\Users\\smsaq\\Project_Titan';
+  const titanRootDir = (process.env.ORION_TITAN_WORKSPACE || 'C:\\Users\\operator\\Project_Titan');
 
   // 1. Tool Registration Verification
   {
@@ -112,7 +112,7 @@ async function runTitanIntegrationPhase2BTests() {
       id: 'escape_test',
       toolId: 'titan.render_video_draft',
       toolName: 'Titan Render Draft',
-      arguments: { titanPath: 'C:\\Users\\smsaq\\Downloads' },
+      arguments: { titanPath: 'C:\\Users\\operator\\Downloads' },
       timestamp: Date.now(),
       requiresUserApproval: true
     };
@@ -208,12 +208,12 @@ async function runTitanIntegrationPhase2BTests() {
 
   // 14. Missing Output Failure Handling
   {
-    const provider = new TitanToolProvider('C:\\Users\\smsaq\\Project_Titan');
+    const provider = new TitanToolProvider((process.env.ORION_TITAN_WORKSPACE || 'C:\\Users\\operator\\Project_Titan'));
     const fakeMissingCall = {
       id: 'missing_script_call',
       toolId: 'titan.render_video_draft',
       toolName: 'Titan Render Draft',
-      arguments: { titanPath: 'C:\\Users\\smsaq\\Downloads' },
+      arguments: { titanPath: 'C:\\Users\\operator\\Downloads' },
       timestamp: Date.now(),
       requiresUserApproval: true
     };

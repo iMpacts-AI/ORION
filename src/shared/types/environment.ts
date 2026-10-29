@@ -3,6 +3,7 @@ import { AssistantState, OrionMode, VisionResult, SystemSnapshot } from '../type
 export interface ActiveWindowInfo {
   title: string;
   processName: string;
+  processId?: number;
   bounds?: { x: number; y: number; width: number; height: number };
 }
 

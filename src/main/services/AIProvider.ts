@@ -75,7 +75,11 @@ export interface IAIProvider {
   isConfigured: boolean;
   getStatus(): ProviderStatus;
 
-  chat(prompt: string, conversationHistory?: Array<{ role: string; content: string }>): Promise<string>;
+  chat(
+    prompt: string,
+    conversationHistory?: Array<{ role: string; content: string }>,
+    externalSignal?: AbortSignal
+  ): Promise<string>;
   stream?(
     prompt: string,
     onToken: (token: string) => void,
@@ -127,6 +131,9 @@ export class LocalHeuristicAIProvider implements IAIProvider {
 
   public async classifyIntent(prompt: string): Promise<IntentClassification> {
     const lower = prompt.toLowerCase().trim();
+    if (LocalHeuristicAIProvider.detectUnsupportedCapability(prompt).unsupported) {
+      return { intent: 'CONVERSATION', confidence: 0.99 };
+    }
 
     // Fast Deterministic Path Detection
     if (lower === 'cpu' || lower === "what's my cpu?" || lower === 'cpu usage' || lower === 'what is my cpu usage?') {
@@ -192,7 +199,7 @@ export class LocalHeuristicAIProvider implements IAIProvider {
       };
     }
 
-    // Official Coders HQ Demo Scenarios
+    // Workstation & Machine Overview Fast-Path Scenarios
     if (
       lower.includes('overview of this machine') ||
       lower.includes('overview of this computer') ||
@@ -260,11 +267,223 @@ export class LocalHeuristicAIProvider implements IAIProvider {
       };
     }
 
+    // Weather & Prayer Timings Fast-Paths (Al-Hikmah Daily Telemetry)
+    if (lower.includes('weather') || lower.includes('temperature in ') || lower.includes('forecast')) {
+      const cityMatch = prompt.match(/(?:in|for|at)\s+([a-zA-Z\s]{2,30})$/i);
+      const city = cityMatch ? cityMatch[1].trim() : 'Abu Dhabi';
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['info.weather'],
+        fastPathMatch: { toolId: 'info.weather', args: { city } }
+      };
+    }
+
+    if (lower.includes('prayer') || lower.includes('salah') || lower.includes('namaz') || lower.includes('fajr') || lower.includes('maghrib')) {
+      const cityMatch = prompt.match(/(?:in|for|at)\s+([a-zA-Z\s]{2,30})$/i);
+      const city = cityMatch ? cityMatch[1].trim() : 'Abu Dhabi';
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['info.prayers'],
+        fastPathMatch: { toolId: 'info.prayers', args: { city, country: 'UAE' } }
+      };
+    }
+
+    // Media & Spotify Fast-Paths
+    if (lower.includes('now playing') || lower.includes('what song') || lower.includes('what is playing') || lower === 'spotify status') {
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['media.status'],
+        fastPathMatch: { toolId: 'media.status', args: {} }
+      };
+    }
+
+    if (
+      lower === 'pause' || lower === 'pause music' || lower === 'pause spotify' ||
+      lower === 'resume' || lower === 'play music' ||
+      lower === 'next track' || lower === 'skip track' || lower === 'next song' ||
+      lower === 'previous track' || lower === 'previous song'
+    ) {
+      let action = 'toggle';
+      if (lower.includes('next') || lower.includes('skip')) action = 'next';
+      else if (lower.includes('prev')) action = 'previous';
+      else if (lower.includes('pause')) action = 'pause';
+      else if (lower.includes('play') || lower.includes('resume')) action = 'play';
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['media.control'],
+        fastPathMatch: { toolId: 'media.control', args: { action } }
+      };
+    }
+
+    if (lower.startsWith('play ') && !lower.includes('game')) {
+      const query = prompt.replace(/^play\s+/i, '').replace(/\s+on\s+spotify$/i, '').trim();
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.98,
+        suggestedTools: ['media.play_spotify'],
+        fastPathMatch: { toolId: 'media.play_spotify', args: { query } }
+      };
+    }
+
+    // Display Brightness Read / Write Fast-Paths
+    if (
+      lower.includes('brightness') ||
+      lower.includes('backlight') ||
+      (lower.includes('screen') && (lower.includes('bright') || lower.includes('dim'))) ||
+      (lower.includes('display') && (lower.includes('bright') || lower.includes('dim')))
+    ) {
+      const pctMatch = lower.match(/(\d{1,3})\s*(?:%|percent)?/);
+      const isMutation =
+        /\b(set|make|change|adjust|turn|put|increase|decrease|raise|lower|up|down|brighter|dimmer|max|full|minimum)\b/i.test(lower) ||
+        (pctMatch !== null && !/\b(is\s+it|check\s+if|whether)\b/i.test(lower));
+
+      if (isMutation) {
+        if (pctMatch) {
+          return {
+            intent: 'FAST_PATH',
+            confidence: 0.99,
+            suggestedTools: ['system.set_brightness'],
+            fastPathMatch: { toolId: 'system.set_brightness', args: { level: Number(pctMatch[1]) } }
+          };
+        }
+        if (/\b(max|full|maximum)\b/i.test(lower)) {
+          return {
+            intent: 'FAST_PATH',
+            confidence: 0.99,
+            suggestedTools: ['system.set_brightness'],
+            fastPathMatch: { toolId: 'system.set_brightness', args: { level: 100 } }
+          };
+        }
+        if (/\b(min|minimum)\b/i.test(lower)) {
+          return {
+            intent: 'FAST_PATH',
+            confidence: 0.99,
+            suggestedTools: ['system.set_brightness'],
+            fastPathMatch: { toolId: 'system.set_brightness', args: { level: 10 } }
+          };
+        }
+        if (/\b(up|increase|raise|brighter|higher)\b/i.test(lower)) {
+          return {
+            intent: 'FAST_PATH',
+            confidence: 0.99,
+            suggestedTools: ['system.control'],
+            fastPathMatch: { toolId: 'system.control', args: { action: 'brightness_up' } }
+          };
+        }
+        if (/\b(down|decrease|lower|dimmer|dim)\b/i.test(lower)) {
+          return {
+            intent: 'FAST_PATH',
+            confidence: 0.99,
+            suggestedTools: ['system.control'],
+            fastPathMatch: { toolId: 'system.control', args: { action: 'brightness_down' } }
+          };
+        }
+      }
+
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['system.get_brightness'],
+        fastPathMatch: { toolId: 'system.get_brightness', args: {} }
+      };
+    }
+
+    // Volume & System Control Fast-Paths
+    if (lower.includes('volume') || lower === 'mute' || lower === 'unmute') {
+      let level = '50';
+      if (lower.includes('unmute')) level = 'unmute';
+      else if (lower.includes('mute')) level = 'mute';
+      else if (lower.includes('up') || lower.includes('louder') || lower.includes('increase')) level = 'up';
+      else if (lower.includes('down') || lower.includes('quieter') || lower.includes('decrease')) level = 'down';
+      else {
+        const numMatch = lower.match(/(\d{1,3})/);
+        if (numMatch) level = numMatch[1];
+      }
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['system.volume'],
+        fastPathMatch: { toolId: 'system.volume', args: { level } }
+      };
+    }
+
+    if (lower === 'clipboard' || lower === 'read clipboard' || lower.includes('what is in my clipboard')) {
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['system.clipboard_read'],
+        fastPathMatch: { toolId: 'system.clipboard_read', args: {} }
+      };
+    }
+
+    // Browser Navigation, Web Search & Official Repository Fast-Paths
+    const urlInPrompt = prompt.match(/https?:\/\/[^\s"'<>]+/i);
+    if (
+      urlInPrompt &&
+      (lower.includes('open ') || lower.includes('navigate ') || lower.includes('go to ') || lower.includes('visit ') || lower.includes('in chrome'))
+    ) {
+      const cleanUrl = urlInPrompt[0].replace(/[.,;]+$/, '');
+      const openInChromeWindow = lower.includes('in chrome') || lower.includes('open chrome');
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['browser.navigate'],
+        fastPathMatch: {
+          toolId: 'browser.navigate',
+          args: { url: cleanUrl, openInChromeWindow }
+        }
+      };
+    }
+
+    if (
+      (lower.includes('open the official repository') ||
+        lower.includes('open official repository') ||
+        (lower.includes('official') && lower.includes('orion') && lower.includes('summarize')))
+    ) {
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['browser.navigate'],
+        fastPathMatch: {
+          toolId: 'browser.navigate',
+          args: { url: 'https://github.com/iMpacts-AI/ORION' }
+        }
+      };
+    }
+
+    if (
+      lower.startsWith('search ') ||
+      lower.includes('search for ') ||
+      lower.includes('search the web')
+    ) {
+      const searchQuery = prompt
+        .replace(/^search\s+(?:the\s+web\s+)?(?:for\s+)?/i, '')
+        .replace(/\s+and\s+show\s+me\s+the\s+result.*$/i, '')
+        .replace(/[.,;]+$/, '')
+        .trim();
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['browser.search'],
+        fastPathMatch: {
+          toolId: 'browser.search',
+          args: { query: searchQuery || prompt }
+        }
+      };
+    }
+
     // Kinetic Computer Use & Desktop OS Automation Intent
     if (
       lower.startsWith('open ') ||
+      lower.startsWith('oprn ') ||
+      lower.startsWith('opne ') ||
       lower.startsWith('try and open ') ||
       lower.startsWith('launch ') ||
+      lower.startsWith('lunach ') ||
       lower.startsWith('start ') ||
       lower.includes('open notepad') ||
       lower.includes('open calculator') ||
@@ -301,6 +520,22 @@ export class LocalHeuristicAIProvider implements IAIProvider {
       };
     }
 
+    if (
+      lower.includes('list') ||
+      lower.includes('files') ||
+      lower.includes('directory') ||
+      lower.includes('folder') ||
+      lower.includes('read') ||
+      lower.includes('inspect')
+    ) {
+      return {
+        intent: 'FILE_OPERATION',
+        confidence: 0.95,
+        suggestedTools: lower.includes('read') ? ['file.read_text'] : ['file.list_directory'],
+        fastPathMatch: lower.includes('read') ? undefined : { toolId: 'file.list_directory', args: { dirPath: '.' } }
+      };
+    }
+
     // General Heuristic Intents
     if (
       lower.includes('cpu') ||
@@ -316,26 +551,13 @@ export class LocalHeuristicAIProvider implements IAIProvider {
       lower.includes('machine') ||
       lower.includes('computer') ||
       lower.includes('specs') ||
+      lower.includes('specification') ||
       lower.includes('hardware')
     ) {
       return {
         intent: 'SYSTEM_QUERY',
         confidence: 0.95,
         suggestedTools: this.inferSystemTools(lower)
-      };
-    }
-
-    if (
-      lower.includes('list') ||
-      lower.includes('files') ||
-      lower.includes('directory') ||
-      lower.includes('read') ||
-      lower.includes('inspect')
-    ) {
-      return {
-        intent: 'FILE_OPERATION',
-        confidence: 0.90,
-        suggestedTools: lower.includes('read') ? ['file.read_text'] : ['file.list_directory']
       };
     }
 
@@ -347,9 +569,17 @@ export class LocalHeuristicAIProvider implements IAIProvider {
 
   private inferSystemTools(lower: string): string[] {
     const tools: string[] = [];
-    if (lower.includes('machine') || lower.includes('computer') || lower.includes('specs') || lower.includes('hardware') || lower.includes('overview')) {
-      return ['system.get_info', 'system.get_cpu_usage', 'system.get_memory_usage'];
+    if (
+      lower.includes('machine') ||
+      lower.includes('computer') ||
+      lower.includes('specs') ||
+      lower.includes('specification') ||
+      lower.includes('hardware') ||
+      lower.includes('overview')
+    ) {
+      return ['system.get_info', 'system.get_cpu_usage', 'system.get_memory_usage', 'system.get_disk_usage'];
     }
+    if (lower.includes('brightness') || lower.includes('backlight')) tools.push('system.get_brightness');
     if (lower.includes('cpu')) tools.push('system.get_cpu_usage');
     if (lower.includes('ram') || lower.includes('memory')) tools.push('system.get_memory_usage');
     if (lower.includes('disk') || lower.includes('storage')) tools.push('system.get_disk_usage');
@@ -388,17 +618,22 @@ export class LocalHeuristicAIProvider implements IAIProvider {
   }
 
   public async chat(prompt: string, conversationHistory?: Array<{ role: string; content: string }>): Promise<string> {
-    const lower = prompt.toLowerCase();
+    const userQueryMatch = prompt.match(/USER OPERATOR QUERY:\s*"([\s\S]*?)"(?:\n\n|$)/);
+    const effectiveUserPrompt = userQueryMatch ? userQueryMatch[1] : prompt;
+    const lower = effectiveUserPrompt.toLowerCase();
 
     // 1. Synthesize from actual tool observations if present in context
-    if (prompt.includes('OBSERVATIONS & TOOL RESULTS DATA:')) {
+    if (
+      prompt.includes('OBSERVATIONS & TOOL RESULTS DATA:') ||
+      prompt.includes('UNTRUSTED OBSERVATIONS DATA & TOOL RESULTS:')
+    ) {
       const observationSummary = this.synthesizeObservations(prompt);
       if (observationSummary) {
         return observationSummary;
       }
     }
 
-    // 2. Specific Coders HQ Demo Queries
+    // 2. Specific System Architecture & Capability Queries
     if (lower.includes('what tools') || lower.includes('available tools') || lower.includes('list tools')) {
       return `ORION System Architecture maintains 16 registered native tools across 5 domains:
 • SYSTEM: system.get_info, system.get_cpu_usage, system.get_memory_usage, system.get_disk_usage, system.get_network_status, system.get_current_time
@@ -423,11 +658,82 @@ export class LocalHeuristicAIProvider implements IAIProvider {
       return 'I am ORION — Advanced Agentic Desktop Command System. Operating with deterministic task orchestration, closed-loop tool execution, and multi-provider failover routing.';
     }
 
-    return `[ORION INTEL] Query received: "${prompt}". Native tool execution and system telemetry remain fully operational.`;
+    // 3. Synthesize from retrieved persisted memory if present in context
+    if (prompt.includes('RETRIEVED PERSISTED MEMORY DATA')) {
+      const memMatch = prompt.match(/RETRIEVED PERSISTED MEMORY DATA[\s\S]*?:\n([\s\S]*?)(?:\n\nUSER OPERATOR QUERY:|$)/);
+      if (memMatch && memMatch[1].trim()) {
+        const memLines = memMatch[1]
+          .trim()
+          .split('\n')
+          .map(l => l.replace(/^\[MEMORY_DATA[^\]]*\]\s*/, '').trim())
+          .filter(Boolean);
+        if (memLines.length > 0) {
+          return `ORION Persisted Memory Recall:\n` + memLines.map(m => `• ${m}`).join('\n');
+        }
+      }
+    }
+
+    // 4. Explicit Unsupported Capability Detection (Never fabricate success)
+    const unsupportedCheck = LocalHeuristicAIProvider.detectUnsupportedCapability(effectiveUserPrompt);
+    if (unsupportedCheck.unsupported) {
+      return `UNSUPPORTED CAPABILITY: ORION does not have a verified native tool for ${unsupportedCheck.capability} (${unsupportedCheck.reason}). No system mutation or external action was executed. Use /tools to inspect the 28 registered authoritative tools.`;
+    }
+
+    return `[ORION OFFLINE FALLBACK] Query received: "${effectiveUserPrompt}". No deterministic local tool matched this request and no neural provider was invoked. Use /tools to inspect verified native tools or /providers to check local Ollama model status.`;
+  }
+
+  public static detectUnsupportedCapability(query: string): { unsupported: boolean; capability?: string; reason?: string } {
+    const lower = (query || '').toLowerCase().trim();
+    const unsupportedPatterns: Array<{ regex: RegExp; capability: string; reason: string }> = [
+      {
+        regex: /\b(bluetooth|airpods|pair\s+device|connect\s+headphones|connect\s+speaker)\b/i,
+        capability: 'Bluetooth radio / peripheral pairing',
+        reason: 'Bluetooth stack mutation is not exposed as a registered ORION tool'
+      },
+      {
+        regex: /\b(keyboard\s+rgb|rgb\s+lighting|fan\s+speed|overclock|undervolt|bios|uefi|firmware\s+flash)\b/i,
+        capability: 'OEM firmware / BIOS / fan / RGB hardware controller',
+        reason: 'Low-level OEM EC/BIOS hardware registers are outside ORION safe tool boundaries'
+      },
+      {
+        regex: /\b(print\s+document|laser\s+printer|inkjet|3d\s+print|hologram|teleport)\b/i,
+        capability: 'Physical printer / hardware peripheral actuation',
+        reason: 'No physical printer or external hardware spooler tool is registered'
+      },
+      {
+        regex: /\b(send\s+imessage|send\s+sms|send\s+whatsapp|make\s+a\s+phone\s+call|dial\s+number|send\s+email\s+to)\b/i,
+        capability: 'External messaging / telephony transmission',
+        reason: 'Outbound SMS/iMessage/email transmission tools are not enabled in the local CLI tool registry'
+      },
+      {
+        regex: /\b(turn\s+off\s+wifi|disable\s+wifi|airplane\s+mode|change\s+mac\s+address|modify\s+firewall|vpn\s+tunnel)\b/i,
+        capability: 'Network adapter state mutation',
+        reason: 'ORION supports read-only network telemetry (system.get_network_status) but blocks network interface disabling'
+      },
+      {
+        regex: /\b(webcam\s+photo|take\s+a\s+selfie|record\s+microphone|camera\s+stream)\b/i,
+        capability: 'Direct camera / webcam capture',
+        reason: 'ORION supports desktop screen observation (computer.observe) but does not capture physical webcam video'
+      }
+    ];
+
+    for (const item of unsupportedPatterns) {
+      if (item.regex.test(lower)) {
+        return {
+          unsupported: true,
+          capability: item.capability,
+          reason: item.reason
+        };
+      }
+    }
+    return { unsupported: false };
   }
 
   private synthesizeObservations(prompt: string): string {
-    const obsIndex = prompt.indexOf('OBSERVATIONS & TOOL RESULTS DATA:');
+    let obsIndex = prompt.indexOf('UNTRUSTED OBSERVATIONS DATA & TOOL RESULTS:');
+    if (obsIndex === -1) {
+      obsIndex = prompt.indexOf('OBSERVATIONS & TOOL RESULTS DATA:');
+    }
     if (obsIndex === -1) return '';
     const obsBlock = prompt.substring(obsIndex);
 
@@ -463,7 +769,11 @@ export class LocalHeuristicAIProvider implements IAIProvider {
         } else if (toolId === 'system.get_memory_usage') {
           summaries.push(`RAM Memory: Using ${parsed.usedGB} GB of ${parsed.totalGB} GB (${parsed.usagePercent}% utilization, ${parsed.freeGB} GB free).`);
         } else if (toolId === 'system.get_disk_usage') {
-          summaries.push(`Storage: Primary system drive is ONLINE with healthy storage reserves.`);
+          if (parsed.totalGB && parsed.totalGB > 0) {
+            summaries.push(`Storage (${parsed.primaryDrive || 'C:'}): ${parsed.usedGB} GB used of ${parsed.totalGB} GB total (${parsed.freeGB} GB free, ${parsed.usagePercent}% used). Status: ONLINE.`);
+          } else {
+            summaries.push(`Storage: Primary system drive is ONLINE with healthy storage reserves.`);
+          }
         } else if (toolId === 'system.get_network_status') {
           summaries.push(`Network: Interface ${parsed.interfaceName} is ${parsed.status} on IP ${parsed.localIp}.`);
         } else if (toolId === 'system.get_current_time') {
@@ -478,6 +788,43 @@ export class LocalHeuristicAIProvider implements IAIProvider {
           } else {
             summaries.push(`Kinetic OS Control: Status [${parsed.status || 'EXECUTED'}]. Workspace updated.`);
           }
+        } else if (toolId === 'info.weather') {
+          summaries.push(`Weather (${parsed.city}): ${parsed.tempC}°C (Feels like ${parsed.feelsLikeC}°C), ${parsed.condition}, Humidity: ${parsed.humidity}, Wind: ${parsed.windKmph}.`);
+        } else if (toolId === 'info.prayers') {
+          const t = parsed.timings || {};
+          summaries.push(`Prayer Timings (${parsed.city}, ${parsed.hijriDate}): Fajr ${t.Fajr} | Dhuhr ${t.Dhuhr} | Asr ${t.Asr} | Maghrib ${t.Maghrib} | Isha ${t.Isha}.`);
+        } else if (toolId === 'media.status') {
+          summaries.push(`Media Status: ${parsed.running ? (parsed.playing ? `Playing "${parsed.windowTitle}" on ${parsed.player}` : `${parsed.player} is open (idle)`) : 'Spotify is not currently running'}.`);
+        } else if (toolId === 'system.get_brightness') {
+          summaries.push(
+            `Display Brightness: Current backlight level is ${parsed.currentBrightness}% (${parsed.levels || 101} levels supported via ${parsed.interface || 'WMI/WmiMonitorBrightness'}, display: ${parsed.instanceName || 'Primary Integrated Panel'}). Verification: VERIFIED.`
+          );
+        } else if (toolId === 'system.set_brightness') {
+          summaries.push(
+            `Display Brightness Updated: Changed from ${parsed.previousBrightness}% to ${parsed.currentBrightness}% (requested: ${parsed.requestedBrightness}%, interface: ${parsed.interface || 'WMI/WmiMonitorBrightnessMethods'}, hardware readback verified: ${parsed.postconditionVerified ? 'YES' : 'NO'}).`
+          );
+        } else if (toolId === 'browser.navigate') {
+          const obs = parsed.observation || {};
+          const title = obs.title || parsed.title || 'Loaded Page';
+          const url = obs.url || parsed.url || '';
+          const snippet = (obs.extractedText || '').slice(0, 400);
+          summaries.push(
+            `Browser Navigation Verified: Loaded "${title}" at ${url}.${snippet ? ` Visible page summary: ${snippet}` : ''}`
+          );
+        } else if (toolId === 'browser.search') {
+          const hits = Array.isArray(parsed.searchResults) ? parsed.searchResults : [];
+          if (hits.length > 0) {
+            const top = hits[0];
+            summaries.push(
+              `Web Search Results for "${parsed.query}": Top verified result is "${top.title}" (${top.url}). ${top.snippet || ''}`
+            );
+          } else {
+            summaries.push(
+              `Web Search for "${parsed.query}": Page "${parsed.pageTitle}" inspected (${(parsed.topLinks || []).length} links found).`
+            );
+          }
+        } else if (toolId === 'media.control' || toolId === 'media.play_spotify' || toolId === 'system.volume') {
+          summaries.push(`Media/Audio Control: ${parsed.message || JSON.stringify(parsed)}`);
         } else if (parsed && typeof parsed === 'object') {
           summaries.push(`Tool ${toolId}: ${JSON.stringify(parsed)}`);
         }

@@ -4,6 +4,7 @@
     "module": "CommonJS",
     "moduleResolution": "node",
     "esModuleInterop": true,
+    "jsx": "react-jsx",
     "skipLibCheck": true,
     "strict": false,
     "outDir": "./dist-test"

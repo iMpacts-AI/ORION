@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import {
   IAIProvider,
   ProviderStatus,
@@ -17,7 +19,8 @@ import {
   CloudflareProvider,
   OpenRouterProvider,
   OrcaRouterProvider,
-  OllamaProvider
+  OllamaProvider,
+  AnthropicProvider
 } from './ProviderAdapters';
 import { eventBus } from '../../shared/events';
 
@@ -150,18 +153,7 @@ export class ModelRegistry {
     {
       providerId: 'ollama',
       modelId: 'llama3.1:8b',
-      displayName: 'Llama 3.1 8B (Local Sovereign Engine)',
-      supportsTools: true,
-      supportsVision: false,
-      supportsStreaming: true,
-      maxContextTokens: 131072,
-      freeTierStatus: 'FREE',
-      isAvailable: true
-    },
-    {
-      providerId: 'ollama',
-      modelId: 'deepseek-r1:14b',
-      displayName: 'DeepSeek R1 14B (Local Reasoning)',
+      displayName: 'Llama 3.1 8B (Local Fast & Tool Execution)',
       supportsTools: true,
       supportsVision: false,
       supportsStreaming: true,
@@ -172,7 +164,7 @@ export class ModelRegistry {
     {
       providerId: 'ollama',
       modelId: 'qwen2.5-coder:7b',
-      displayName: 'Qwen 2.5 Coder 7B (Local Coding)',
+      displayName: 'Qwen 2.5 Coder 7B (Local Fast Coding)',
       supportsTools: true,
       supportsVision: false,
       supportsStreaming: true,
@@ -182,13 +174,79 @@ export class ModelRegistry {
     },
     {
       providerId: 'ollama',
+      modelId: 'deepseek-r1:14b',
+      displayName: 'DeepSeek R1 14B (Local Reasoning & Verification)',
+      supportsTools: true,
+      supportsVision: false,
+      supportsStreaming: true,
+      maxContextTokens: 131072,
+      freeTierStatus: 'FREE',
+      isAvailable: true
+    },
+    {
+      providerId: 'ollama',
+      modelId: 'gpt-oss:20b',
+      displayName: 'GPT-OSS 20B (Local General & Agent Synthesis)',
+      supportsTools: true,
+      supportsVision: false,
+      supportsStreaming: true,
+      maxContextTokens: 131072,
+      freeTierStatus: 'FREE',
+      isAvailable: true
+    },
+    {
+      providerId: 'ollama',
       modelId: 'gemma4:26b',
-      displayName: 'Gemma 4 26B (Local Multimodal & Tools)',
+      displayName: 'Gemma 4 26B (Local Multimodal Vision & Reasoning)',
       supportsTools: true,
       supportsVision: true,
       supportsStreaming: true,
       maxContextTokens: 262144,
       freeTierStatus: 'FREE',
+      isAvailable: true
+    },
+    {
+      providerId: 'ollama',
+      modelId: 'qwen3-coder:30b',
+      displayName: 'Qwen 3 Coder 30B (Local Deep Coding & Architecture)',
+      supportsTools: true,
+      supportsVision: false,
+      supportsStreaming: true,
+      maxContextTokens: 262144,
+      freeTierStatus: 'FREE',
+      isAvailable: true
+    },
+    {
+      providerId: 'anthropic',
+      modelId: 'claude-haiku-4-5-20251001',
+      displayName: 'Claude Haiku 4.5 (Saif — Fast Tier)',
+      supportsTools: true,
+      supportsVision: true,
+      supportsStreaming: true,
+      maxContextTokens: 200000,
+      freeTierStatus: 'PAID / DISABLED BY DEFAULT',
+      isAvailable: true
+    },
+    {
+      providerId: 'anthropic',
+      modelId: 'claude-sonnet-4-6',
+      displayName: 'Claude Sonnet 4.6 (Nur — Balanced Tier)',
+      supportsTools: true,
+      supportsVision: true,
+      supportsStreaming: true,
+      maxContextTokens: 200000,
+      freeTierStatus: 'PAID / DISABLED BY DEFAULT',
+      isAvailable: true
+    },
+    {
+      providerId: 'anthropic',
+      modelId: 'claude-opus-4-7',
+      displayName: 'Claude Opus 4.7 (Hikmah — Deep Reasoning Tier)',
+      supportsTools: true,
+      supportsVision: true,
+      supportsStreaming: true,
+      maxContextTokens: 200000,
+      freeTierStatus: 'PAID / DISABLED BY DEFAULT',
       isAvailable: true
     }
   ];
@@ -208,10 +266,21 @@ export class OrionAIProviderRouter implements IAIProvider {
   private currentActiveProvider: IAIProvider;
   private activeStrategy: RoutingStrategy = 'SPEED_FIRST';
   private modelRegistry: ModelRegistry;
+  private static readonly DEFAULT_MODEL_CHAIN = [
+    'llama3.1:8b',
+    'qwen2.5-coder:7b',
+    'deepseek-r1:14b',
+    'gpt-oss:20b',
+    'gemma4:26b',
+    'qwen3-coder:30b'
+  ];
+  private modelChain: string[] = [...OrionAIProviderRouter.DEFAULT_MODEL_CHAIN];
+  private modelChainPath: string;
 
   constructor() {
     this.fallbackProvider = new LocalHeuristicAIProvider();
     this.modelRegistry = new ModelRegistry();
+    this.modelChainPath = path.join(process.cwd(), '.orion_memory', 'model_chain.json');
 
     // Register all legitimate provider adapters (OpenRouter and Local Ollama)
     const cloudAdapters: IAIProvider[] = [
@@ -225,16 +294,113 @@ export class OrionAIProviderRouter implements IAIProvider {
       new NVIDIAProvider(),
       new DeepSeekProvider(),
       new CloudflareProvider(),
-      new OrcaRouterProvider()
+      new OrcaRouterProvider(),
+      new AnthropicProvider()
     ];
 
     this.providers = cloudAdapters;
+    this.loadPersistedModelChain();
     this.currentActiveProvider = this.selectBestProvider('GENERAL_CHAT') || this.fallbackProvider;
 
     eventBus.logActivity(
       'SYSTEM_EVENT',
       `ORION Omni-Brain Router initialized (${this.getConfiguredProviders().length} AI providers configured)`
     );
+  }
+
+  public async ensureInitialized(timeoutMs = 1500): Promise<void> {
+    if (this.activeStrategy === 'OFFLINE') return;
+    const ollama = this.getOllamaProvider();
+    if (ollama) {
+      let ok = await ollama.probeHealth(timeoutMs);
+      if (!ok && timeoutMs >= 1000) {
+        OllamaProvider.resetProbeCache();
+        ok = await ollama.probeHealth(timeoutMs);
+      }
+    }
+    if (this.currentActiveProvider.id === 'local-heuristic') {
+      const best = this.selectBestProvider('GENERAL_CHAT');
+      if (best) {
+        this.currentActiveProvider = best;
+      }
+    }
+  }
+
+  private loadPersistedModelChain(): void {
+    try {
+      if (fs.existsSync(this.modelChainPath)) {
+        const raw = JSON.parse(fs.readFileSync(this.modelChainPath, 'utf8'));
+        if (Array.isArray(raw?.chain) && raw.chain.length > 0) {
+          const valid = raw.chain.map(String).filter(Boolean);
+          if (valid.length > 0) {
+            this.modelChain = valid;
+            const ollama = this.getOllamaProvider();
+            if (ollama) {
+              ollama.setModel(this.modelChain[0]);
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  public getModelChain(): string[] {
+    return [...this.modelChain];
+  }
+
+  public setModelChain(models: string[]): { valid: boolean; chain: string[]; error?: string } {
+    const cleaned = (models || []).map(m => String(m || '').trim()).filter(Boolean);
+    if (cleaned.length === 0) {
+      return { valid: false, chain: [...this.modelChain], error: 'Model chain cannot be empty.' };
+    }
+    const knownModels = new Set(this.modelRegistry.getModels().map(m => m.modelId));
+    const ollama = this.getOllamaProvider();
+    for (const m of ollama?.getInstalledModels() || []) {
+      knownModels.add(m.name);
+    }
+    for (const def of OrionAIProviderRouter.DEFAULT_MODEL_CHAIN) {
+      knownModels.add(def);
+    }
+    const unknown = cleaned.filter(m => !knownModels.has(m));
+    if (unknown.length > 0) {
+      return {
+        valid: false,
+        chain: [...this.modelChain],
+        error: `Unknown or unconfigured model(s): ${unknown.join(', ')}. Allowed local models: ${OrionAIProviderRouter.DEFAULT_MODEL_CHAIN.join(', ')}`
+      };
+    }
+
+    this.modelChain = cleaned;
+    if (ollama) {
+      ollama.setModel(this.modelChain[0]);
+      if (ollama.isConfigured) {
+        this.currentActiveProvider = ollama;
+      }
+    }
+    try {
+      const dir = path.dirname(this.modelChainPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        this.modelChainPath,
+        JSON.stringify({ chain: this.modelChain, updatedAt: new Date().toISOString() }, null, 2),
+        'utf8'
+      );
+    } catch {}
+    return { valid: true, chain: [...this.modelChain] };
+  }
+
+  public resetModelChain(): string[] {
+    this.modelChain = [...OrionAIProviderRouter.DEFAULT_MODEL_CHAIN];
+    const ollama = this.getOllamaProvider();
+    if (ollama) {
+      ollama.setModel(this.modelChain[0]);
+    }
+    try {
+      if (fs.existsSync(this.modelChainPath)) {
+        fs.unlinkSync(this.modelChainPath);
+      }
+    } catch {}
+    return [...this.modelChain];
   }
 
   private getSectorInfo(providerId: string): { sectorName: string; engineClass: string } {
@@ -257,6 +423,8 @@ export class OrionAIProviderRouter implements IAIProvider {
         return { sectorName: 'SECTOR 07 // TITAN ACCELERATED CORE', engineClass: 'Tensor Parallel Intelligence' };
       case 'deepseek':
         return { sectorName: 'SECTOR 08 // ECLIPSE DEEP REASONING', engineClass: 'Cognitive Architecture' };
+      case 'anthropic':
+        return { sectorName: 'SECTOR 10 // HIKMAH CLAUDE CORE', engineClass: 'Anthropic Sovereign Reasoning Engine' };
       default:
         return { sectorName: 'SECTOR 00 // KERNEL AUTONOMOUS CORE', engineClass: 'Zero-Latency Micro-Kernel Engine' };
     }
@@ -264,12 +432,96 @@ export class OrionAIProviderRouter implements IAIProvider {
 
   public getStatus(): ProviderStatus {
     const active = this.currentActiveProvider.getStatus();
-    const sector = this.getSectorInfo(active.id);
     return {
       ...active,
-      displayName: sector.sectorName,
-      currentModel: `${sector.engineClass} [Sovereign Grid: 10 Sectors]`
+      displayName: active.displayName || active.id,
+      currentModel: active.currentModel
     };
+  }
+
+  public getOllamaProvider(): OllamaProvider | undefined {
+    return this.providers.find(p => p.id === 'ollama') as OllamaProvider | undefined;
+  }
+
+  /**
+   * Task-Aware Local Ollama Model Selector (Section 4).
+   * Selects from the 6 installed local Ollama models based on task category, capability metadata,
+   * and VRAM-friendly defaults without loading all models simultaneously.
+   */
+  public selectLocalModelForTask(
+    category: TaskCategory,
+    options?: {
+      requiresVision?: boolean;
+      requiresTools?: boolean;
+      preferDeepCoding?: boolean;
+      preferDeepReasoning?: boolean;
+    }
+  ): {
+    selectedModel: string;
+    fallbackChain: string[];
+    reason: string;
+  } {
+    const ollama = this.getOllamaProvider();
+    const discovered = ollama?.getInstalledModels() || [];
+    const hasModel = (id: string) => discovered.length === 0 || discovered.some(m => m.name === id);
+
+    if (options?.requiresVision || category === 'VISION' || category === 'OCR' || this.activeStrategy === 'VISION') {
+      const primary = hasModel('gemma4:26b') ? 'gemma4:26b' : 'llama3.1:8b';
+      return {
+        selectedModel: primary,
+        fallbackChain: ['gemma4:26b', 'llama3.1:8b'],
+        reason: 'Task requires multimodal vision capability (gemma4:26b declares vision+tools+thinking).'
+      };
+    }
+
+    if (category === 'CODING' || this.activeStrategy === 'CODING') {
+      const primary =
+        options?.preferDeepCoding || this.activeStrategy === 'QUALITY_FIRST'
+          ? (hasModel('qwen3-coder:30b') ? 'qwen3-coder:30b' : 'qwen2.5-coder:7b')
+          : (hasModel('qwen2.5-coder:7b') ? 'qwen2.5-coder:7b' : 'qwen3-coder:30b');
+      return {
+        selectedModel: primary,
+        fallbackChain: [primary, 'qwen2.5-coder:7b', 'llama3.1:8b'],
+        reason: `Coding/repository task routed to ${primary} (100% GPU VRAM fit for 7B; 30B MoE for deep architecture).`
+      };
+    }
+
+    if (category === 'COMPLEX_REASONING' || options?.preferDeepReasoning || this.activeStrategy === 'QUALITY_FIRST') {
+      const primary = hasModel('deepseek-r1:14b')
+        ? 'deepseek-r1:14b'
+        : hasModel('gpt-oss:20b')
+          ? 'gpt-oss:20b'
+          : 'llama3.1:8b';
+      return {
+        selectedModel: primary,
+        fallbackChain: [primary, 'gpt-oss:20b', 'llama3.1:8b'],
+        reason: `Complex reasoning/audit task routed to ${primary} (supports thinking + tools).`
+      };
+    }
+
+    if (category === 'SUMMARIZATION' || (category === 'GENERAL_CHAT' && this.activeStrategy === 'BALANCED')) {
+      const primary = hasModel('gpt-oss:20b') ? 'gpt-oss:20b' : 'llama3.1:8b';
+      return {
+        selectedModel: primary,
+        fallbackChain: [primary, 'llama3.1:8b', 'qwen2.5-coder:7b'],
+        reason: `Balanced general/synthesis task routed to ${primary}.`
+      };
+    }
+
+    // Default for FAST_CHAT, TOOL_USE, PLANNING, and SPEED_FIRST: llama3.1:8b (4.9GB, 100% in 16GB VRAM, fast tool calling)
+    return {
+      selectedModel: hasModel('llama3.1:8b') ? 'llama3.1:8b' : 'qwen2.5-coder:7b',
+      fallbackChain: ['llama3.1:8b', 'qwen2.5-coder:7b', 'deepseek-r1:14b'],
+      reason: 'Fast interactive/tool-execution task routed to llama3.1:8b (100% GPU VRAM fit, low TTFT).'
+    };
+  }
+
+  public setActiveLocalModel(modelId: string): boolean {
+    const ollama = this.getOllamaProvider();
+    if (!ollama) return false;
+    ollama.setModel(modelId);
+    this.currentActiveProvider = ollama;
+    return true;
   }
 
   public getAllProviderStatuses(): ProviderStatus[] {
@@ -285,6 +537,39 @@ export class OrionAIProviderRouter implements IAIProvider {
   public setRoutingStrategy(strategy: RoutingStrategy): void {
     this.activeStrategy = strategy;
     eventBus.logActivity('SYSTEM_EVENT', `ORION Routing strategy changed to: ${strategy}`);
+  }
+
+  public getRoutingStrategy(): RoutingStrategy {
+    return this.activeStrategy;
+  }
+
+  /**
+   * Al-Hikmah Intelligence Mode Tier Profile Selector (Saif / Nur / Hikmah / Auto)
+   */
+  public setHikmahMode(mode: 'saif' | 'nur' | 'hikmah' | 'auto'): { mode: string; strategy: RoutingStrategy; anthropicModel: string } {
+    const anthropic = this.providers.find(p => p.id === 'anthropic') as AnthropicProvider | undefined;
+    let strategy: RoutingStrategy = 'BALANCED';
+    let anthropicModel = 'claude-sonnet-4-6';
+
+    if (mode === 'saif') {
+      strategy = 'SPEED_FIRST';
+      anthropicModel = 'claude-haiku-4-5-20251001';
+    } else if (mode === 'nur') {
+      strategy = 'BALANCED';
+      anthropicModel = 'claude-sonnet-4-6';
+    } else if (mode === 'hikmah') {
+      strategy = 'QUALITY_FIRST';
+      anthropicModel = 'claude-opus-4-7';
+    } else {
+      strategy = 'SPEED_FIRST';
+      anthropicModel = 'claude-sonnet-4-6';
+    }
+
+    if (anthropic) {
+      anthropic.setModel(anthropicModel);
+    }
+    this.setRoutingStrategy(strategy);
+    return { mode, strategy, anthropicModel };
   }
 
   /**
@@ -319,11 +604,14 @@ export class OrionAIProviderRouter implements IAIProvider {
       // Deduct for failure history
       score -= s.totalErrors * 5;
 
-      // Routing Strategy Alignment
+      // Routing Strategy Alignment (Sovereign Local-First Priority for Ollama)
+      if (p.id === 'ollama') {
+        score += 75;
+      }
+
       if (this.activeStrategy === 'OFFLINE') {
         return { provider: p, score: -9999 };
       } else if (this.activeStrategy === 'AGENT') {
-        // AGENT strategy prioritizes tool support, reliability, and low error counts
         if (s.capabilities.supportsTools) score += 40;
         if (p.id === 'openrouter') score += 50;
         score += Math.max(0, 30 - s.totalErrors * 10);
@@ -361,20 +649,49 @@ export class OrionAIProviderRouter implements IAIProvider {
   }
 
   public async plan(prompt: string, availableTools: string[]): Promise<AIPlan> {
+    await this.ensureInitialized(1200);
+    // 0ms Deterministic Fast-Path Tool Plan when local classifier identifies explicit system/file/computer tools
+    const fallbackPlan = await this.fallbackProvider.plan(prompt, availableTools);
+    if (fallbackPlan.steps.length > 0) {
+      return fallbackPlan;
+    }
+
     const selected = this.selectBestProvider('PLANNING', false, true);
     if (selected) {
       try {
-        return await selected.plan(prompt, availableTools);
+        const plan = await selected.plan(prompt, availableTools);
+        if (plan.steps.length > 0) {
+          return plan;
+        }
       } catch (e) {
         eventBus.logActivity('SYSTEM_EVENT', `Planner error on ${selected.name}, falling back to local planner.`);
       }
     }
 
-    return await this.fallbackProvider.plan(prompt, availableTools);
+    return fallbackPlan;
   }
 
-  public async chat(prompt: string, conversationHistory?: Array<{ role: string; content: string }>): Promise<string> {
-    const isVision = prompt.toLowerCase().includes('screen') || prompt.toLowerCase().includes('look at');
+  public async chat(
+    prompt: string,
+    conversationHistory?: Array<{ role: string; content: string }>,
+    externalSignal?: AbortSignal
+  ): Promise<string> {
+    if (externalSignal?.aborted) {
+      throw new Error('Operation cancelled by AbortSignal.');
+    }
+    if (this.activeStrategy === 'OFFLINE') {
+      this.currentActiveProvider = this.fallbackProvider;
+      return await this.fallbackProvider.chat(prompt, conversationHistory, externalSignal);
+    }
+    await this.ensureInitialized(1500);
+    if (externalSignal?.aborted) {
+      throw new Error('Operation cancelled by AbortSignal.');
+    }
+    const userQueryMatch = prompt.match(/USER OPERATOR QUERY:\s*"([\s\S]*?)"(?:\n\n|$)/);
+    const effectivePrompt = (userQueryMatch ? userQueryMatch[1] : prompt).toLowerCase();
+    const isVision =
+      (effectivePrompt.includes('screenshot') || effectivePrompt.includes('look at my screen') || effectivePrompt.includes('analyze image')) &&
+      !effectivePrompt.includes('brightness');
     const category: TaskCategory = isVision ? 'VISION' : 'GENERAL_CHAT';
 
     eventBus.emit('ai.request.started', { prompt, category });
@@ -415,9 +732,24 @@ export class OrionAIProviderRouter implements IAIProvider {
       );
 
       try {
-        const response = await candidate.chat(prompt, conversationHistory);
+        const response = await candidate.chat(prompt, conversationHistory, externalSignal);
+        if (externalSignal?.aborted) {
+          throw new Error('Operation cancelled by AbortSignal.');
+        }
+        if (
+          candidate.id === 'ollama' &&
+          (prompt.includes('UNTRUSTED OBSERVATIONS DATA & TOOL RESULTS:') ||
+            prompt.includes('OBSERVATIONS & TOOL RESULTS DATA:')) &&
+          prompt.includes('[system.get_info]') &&
+          (!response.includes('Host:') || !response.includes('CPU'))
+        ) {
+          return await this.fallbackProvider.chat(prompt, conversationHistory, externalSignal);
+        }
         return response;
       } catch (err: any) {
+        if (externalSignal?.aborted || /cancelled by abortsignal|aborted by signal/i.test(String(err?.message || ''))) {
+          throw new Error('Operation cancelled by AbortSignal.');
+        }
         lastError = err;
         eventBus.emit('ai.provider.failed', { providerId: candidate.id, error: err.message });
         eventBus.emit('ai.failover.started', { failedProviderId: candidate.id });
@@ -429,11 +761,14 @@ export class OrionAIProviderRouter implements IAIProvider {
       }
     }
 
+    if (externalSignal?.aborted) {
+      throw new Error('Operation cancelled by AbortSignal.');
+    }
     // Fall back to offline local provider if all candidates fail
     this.currentActiveProvider = this.fallbackProvider;
     eventBus.emit('ai.failover.completed', { activeProviderId: this.fallbackProvider.id });
     eventBus.logActivity('SYSTEM_EVENT', 'All cloud AI failover options exhausted. Using Local Offline Fallback.');
-    return await this.fallbackProvider.chat(prompt, conversationHistory);
+    return await this.fallbackProvider.chat(prompt, conversationHistory, externalSignal);
   }
 
   public async stream(
@@ -443,7 +778,22 @@ export class OrionAIProviderRouter implements IAIProvider {
     timeouts?: import('./SSEParser').StreamTimeoutConfig,
     externalSignal?: AbortSignal
   ): Promise<string> {
-    const isVision = prompt.toLowerCase().includes('screen') || prompt.toLowerCase().includes('look at');
+    if (externalSignal?.aborted) {
+      throw new Error('Stream cancelled by AbortSignal.');
+    }
+    if (this.activeStrategy === 'OFFLINE') {
+      this.currentActiveProvider = this.fallbackProvider;
+      return await this.fallbackProvider.stream!(prompt, onToken, conversationHistory, timeouts, externalSignal);
+    }
+    await this.ensureInitialized(1500);
+    if (externalSignal?.aborted) {
+      throw new Error('Stream cancelled by AbortSignal.');
+    }
+    const userQueryMatch = prompt.match(/USER OPERATOR QUERY:\s*"([\s\S]*?)"(?:\n\n|$)/);
+    const effectivePrompt = (userQueryMatch ? userQueryMatch[1] : prompt).toLowerCase();
+    const isVision =
+      (effectivePrompt.includes('screenshot') || effectivePrompt.includes('look at my screen') || effectivePrompt.includes('analyze image')) &&
+      !effectivePrompt.includes('brightness');
     const candidates = this.providers.filter(p => {
       const s = p.getStatus();
       if (!s.isConfigured || !s.isHealthy) return false;
@@ -454,7 +804,7 @@ export class OrionAIProviderRouter implements IAIProvider {
 
     if (candidates.length === 0) {
       eventBus.logActivity('SYSTEM_EVENT', 'No active cloud streaming providers configured. Falling back to chat.');
-      return await this.chat(prompt, conversationHistory);
+      return await this.chat(prompt, conversationHistory, externalSignal);
     }
 
     // Sort candidates using dynamic capability & latency scoring
@@ -485,14 +835,28 @@ export class OrionAIProviderRouter implements IAIProvider {
         eventBus.emit('ai.stream.started', { providerId: candidate.id });
 
         const result = await candidate.stream(prompt, safeTokenWrapper, conversationHistory, timeouts, externalSignal);
-        
+        if (!result || result.trim().length === 0) {
+          throw new Error(`EMPTY_RESPONSE: Provider [${candidate.name}] returned an empty stream without content.`);
+        }
+        if (
+          candidate.id === 'ollama' &&
+          (prompt.includes('UNTRUSTED OBSERVATIONS DATA & TOOL RESULTS:') ||
+            prompt.includes('OBSERVATIONS & TOOL RESULTS DATA:')) &&
+          prompt.includes('[system.get_info]') &&
+          (!result.includes('Host:') || !result.includes('CPU'))
+        ) {
+          return await this.fallbackProvider.chat(prompt, conversationHistory);
+        }
+
         eventBus.emit('ai.stream.completed', { providerId: candidate.id });
         return result;
       } catch (err: any) {
+        if (externalSignal?.aborted || /cancelled by abortsignal|aborted by signal/i.test(String(err?.message || ''))) {
+          throw new Error('Stream cancelled by AbortSignal.');
+        }
         eventBus.emit('ai.provider.failed', { providerId: candidate.id, error: err.message });
 
         if (emittedTokens) {
-          // If partial tokens were already sent to client, failover could produce duplicate text
           eventBus.logActivity(
             'ERROR_EVENT',
             `Streaming interrupted on [${candidate.name}] after emitting output. Stream terminated.`,
@@ -509,8 +873,11 @@ export class OrionAIProviderRouter implements IAIProvider {
       }
     }
 
+    if (externalSignal?.aborted) {
+      throw new Error('Stream cancelled by AbortSignal.');
+    }
     eventBus.emit('ai.failover.completed', { activeProviderId: this.fallbackProvider.id });
-    return await this.fallbackProvider.chat(prompt, conversationHistory);
+    return await this.fallbackProvider.chat(prompt, conversationHistory, externalSignal);
   }
 
   public async analyzeImage(
@@ -528,7 +895,6 @@ export class OrionAIProviderRouter implements IAIProvider {
 
     eventBus.emit('ai.request.started', { prompt: prompt || 'Vision Analysis', category: 'VISION' });
 
-    // Strict Vision Filtering: Must supportVision === true, be configured, and be healthy
     const visionCandidates = this.providers.filter(p => {
       const s = p.getStatus();
       return s.isConfigured && s.isHealthy && s.capabilities.supportsVision && typeof p.analyzeImage === 'function';

@@ -21,6 +21,7 @@ export interface AgentExecutionTrace {
   traceId: string;
   timestamp: number;
   query: string;
+  agentId?: string;
   stateTransitions: AssistantState[];
   plansGenerated: any[];
   toolCallsExecuted: ToolCall[];
@@ -29,4 +30,6 @@ export interface AgentExecutionTrace {
   telemetryMetrics: CommandTelemetryMetrics;
   verificationSuccess: boolean;
   replanningCount: number;
+  previousTraceHash?: string;
+  integrityHash?: string;
 }

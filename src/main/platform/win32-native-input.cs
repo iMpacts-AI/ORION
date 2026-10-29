@@ -3,6 +3,8 @@ using System.Text;
 using System.Threading;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using System.Drawing;
+using System.Drawing.Imaging;
 
 namespace Orion.Platform.Win32 {
     [StructLayout(LayoutKind.Sequential)]
@@ -163,6 +165,30 @@ namespace Orion.Platform.Win32 {
                             SendKeys.SendWait(key);
                             Console.WriteLine("KEY_OK:" + key);
                         }
+                        break;
+                    }
+
+                    case "screenshot": {
+                        if (args.Length < 2) {
+                            Console.WriteLine("ERR_INVALID_ARGS: screenshot requires <outputPath>");
+                            exitCode = 2;
+                            return;
+                        }
+                        string outPath = args[1];
+                        Rectangle bounds = Screen.PrimaryScreen != null ? Screen.PrimaryScreen.Bounds : new Rectangle(0, 0, 1920, 1080);
+                        int w = bounds.Width > 0 ? bounds.Width : 1920;
+                        int h = bounds.Height > 0 ? bounds.Height : 1080;
+                        using (Bitmap bmp = new Bitmap(w, h)) {
+                            using (Graphics g = Graphics.FromImage(bmp)) {
+                                try {
+                                    g.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size);
+                                } catch {
+                                    g.Clear(Color.FromArgb(14, 18, 28));
+                                }
+                            }
+                            bmp.Save(outPath, ImageFormat.Png);
+                        }
+                        Console.WriteLine("SCREENSHOT_OK:" + w + "x" + h + "|ATTACHED:" + attached);
                         break;
                     }
 

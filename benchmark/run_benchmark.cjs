@@ -1,6 +1,6 @@
 /**
  * ORION Computer-Use Benchmark Runner v1.0.0
- * 
+ *
  * Executes 10 distinct real-world computer-use and system automation tasks.
  * Evaluates the real ORION pipeline: User Input -> Intent -> Plan -> Tool -> Verification -> Output.
  * Each task runs 3 iterations to compute deterministic statistics.
@@ -178,15 +178,16 @@ async function runTask2(runNum) {
 
     const res = await toolService.executeTool(toolCall);
 
-    // Verification
-    const readContent = res.data?.contentSnippet || res.data?.content;
-    const readMatch = res.success && readContent === seedToken;
+    // Verification: file.read_text wraps untrusted file contents in <UNTRUSTED_DATA ...> envelope via UntrustedContentBoundary
+    const readContent = String(res.data?.contentSnippet || res.data?.content || '');
+    const hasBoundaryEnvelope = readContent.includes('<UNTRUSTED_DATA') && readContent.includes('</UNTRUSTED_DATA>');
+    const readMatch = res.success && (readContent === seedToken || (hasBoundaryEnvelope && readContent.includes(seedToken)));
     if (readMatch) {
       recordResult({
         taskId, taskName, runNumber: runNum, startTime: start,
         success: true, status: 'PASSED',
         toolCalls: ['file.read_text'],
-        verificationResult: `Read exact seeded token (${seedToken.slice(0, 25)}...).`
+        verificationResult: `Read exact seeded token (${seedToken.slice(0, 25)}...) inside UntrustedContentBoundary envelope.`
       });
     } else {
       recordResult({
@@ -566,7 +567,8 @@ async function runTask8(runNum) {
 
     recordResult({
       taskId, taskName, runNumber: runNum, startTime: start,
-      success: true, status: 'PASSED',
+      success: Boolean(hasMetrics && hasCapture && hasObservation),
+      status: hasMetrics && hasCapture && hasObservation ? 'PASSED' : 'FAILED',
       toolCalls: ['screenCapture.getScreenMetrics', 'screenUnderstanding.captureObservation'],
       verificationResult: `SCREEN CAPTURE: PASS (${metrics.width}x${metrics.height}) | SCREEN UNDERSTANDING: PASS (Active: "${observation.activeWindow?.processName || 'N/A'}") | MULTIMODAL VLM: ${vlmStatus} | UI GROUNDING: PASS`
     });
@@ -859,7 +861,7 @@ async function executeBenchmark() {
 
 ## 4. Vision & Perception Breakdown
 
-* **SCREEN CAPTURE:** **PASS** (1080p desktop display frame acquired cleanly via Electron / ScreenCaptureService)
+* **SCREEN CAPTURE:** **PASS** (1080p desktop display frame acquired cleanly via ScreenCaptureService)
 * **SCREEN UNDERSTANDING:** **PASS** (Active window title and process boundaries identified)
 * **MULTIMODAL VLM:** **NOT CONFIGURED** (Honest diagnostic: no external multimodal vision API token was passed for offline visual OCR)
 * **UI GROUNDING:** **PASS** (Element bounding boxes and centroid coordinates resolved without exception)
@@ -873,14 +875,6 @@ async function executeBenchmark() {
 * **Permission Gating:** \`allowed: false\`
 * **System State:** Target file does not exist on disk.
 * **Verdict:** **PASS**. Protection of system roots is deterministically enforced by \`ActionRiskEvaluator\` and \`ComputerPermissionService\`.
-
----
-
-## 6. Findings & Recommended Next Steps
-
-1. **Local Model Priority:** Cloud AI calls introduce 1,500ms–2,500ms round trips. Integrating a local 14B model (Ollama) will reduce Task 01 latency below 500ms.
-2. **Native C++ Screen Duplication:** Screen capture is functional at ~90ms, but migrating to native DirectX DXGI capture will bring acquisition under 16ms.
-3. **On-Device VLM Grounding:** Deploying a lightweight local vision model (Moondream2 / Qwen2-VL) will eliminate the unconfigured cloud vision bottleneck for offline screen OCR.
 `;
 
   fs.writeFileSync(reportMarkdownPath, reportMd, 'utf-8');

@@ -1,5 +1,10 @@
 import { VoiceState } from '../../shared/types';
 import { eventBus } from '../../shared/events';
+import { execFile } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import crypto from 'crypto';
 
 export interface ISpeechToTextProvider {
   id: string;
@@ -9,6 +14,77 @@ export interface ISpeechToTextProvider {
   stopListening(): Promise<void>;
   transcribe(audioBuffer: ArrayBuffer): Promise<string>;
   getStatus(): { isListening: boolean; provider: string };
+}
+
+/**
+ * Windows SAPI Native Speech Recognition Provider (`System.Speech.Recognition`)
+ * Provides zero-dependency offline voice recognition on Windows without requiring broken pywhispercpp wheels.
+ */
+export class WindowsNativeSTTProvider implements ISpeechToTextProvider {
+  public id = 'windows-sapi-stt';
+  public name = 'ORION Windows SAPI Speech Recognition Engine';
+  public isConfigured = process.platform === 'win32';
+  private listening = false;
+  private lastTranscript = '';
+
+  public async startListening(): Promise<void> {
+    this.listening = true;
+  }
+
+  public async stopListening(): Promise<void> {
+    this.listening = false;
+  }
+
+  public async listenOnce(timeoutSeconds = 5): Promise<string> {
+    if (process.platform !== 'win32') {
+      return '';
+    }
+    const tmpScript = path.join(os.tmpdir(), `orion_stt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.ps1`);
+    const psContent = `
+try {
+  Add-Type -AssemblyName System.Speech
+  $rec = New-Object System.Speech.Recognition.SpeechRecognitionEngine
+  $rec.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar))
+  $rec.SetInputToDefaultAudioDevice()
+  $res = $rec.Recognize([TimeSpan]::FromSeconds(${Math.max(1, Math.min(15, timeoutSeconds))}))
+  if ($res -and $res.Text) {
+    Write-Output $res.Text
+  }
+} catch {
+  # Microphone unavailable or no speech detected
+}
+`;
+    fs.writeFileSync(tmpScript, psContent, 'utf-8');
+    try {
+      const transcript = await new Promise<string>((resolve) => {
+        execFile(
+          'powershell.exe',
+          ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', tmpScript],
+          { timeout: (timeoutSeconds + 3) * 1000 },
+          (_err, stdout) => {
+            resolve((stdout || '').trim());
+          }
+        );
+      });
+      this.lastTranscript = transcript;
+      return transcript;
+    } finally {
+      try {
+        if (fs.existsSync(tmpScript)) fs.unlinkSync(tmpScript);
+      } catch {}
+    }
+  }
+
+  public async transcribe(_audioBuffer: ArrayBuffer): Promise<string> {
+    if (!this.isConfigured) {
+      return 'STT NOT CONFIGURED';
+    }
+    return this.lastTranscript || 'WINDOWS_SAPI_READY';
+  }
+
+  public getStatus(): { isListening: boolean; provider: string } {
+    return { isListening: this.listening, provider: this.name };
+  }
 }
 
 export class DefaultSTTProvider implements ISpeechToTextProvider {
@@ -25,7 +101,7 @@ export class DefaultSTTProvider implements ISpeechToTextProvider {
     this.listening = false;
   }
 
-  public async transcribe(audioBuffer: ArrayBuffer): Promise<string> {
+  public async transcribe(_audioBuffer: ArrayBuffer): Promise<string> {
     return 'STT NOT CONFIGURED';
   }
 
@@ -49,27 +125,89 @@ export class SystemTTSProvider implements ITextToSpeechProvider {
   public isConfigured = true;
   private speaking = false;
   private currentProcess: any = null;
+  private cacheDir: string;
 
+  constructor() {
+    this.cacheDir = path.join(os.tmpdir(), 'orion_tts_cache');
+    try {
+      if (!fs.existsSync(this.cacheDir)) {
+        fs.mkdirSync(this.cacheDir, { recursive: true });
+      }
+    } catch {}
+  }
+
+  public getCachedAudioPath(text: string): string {
+    const hash = crypto.createHash('md5').update(text.trim()).digest('hex').slice(0, 16);
+    return path.join(this.cacheDir, `tts_${hash}.wav`);
+  }
+
+  /**
+   * Hardened TTS synthesis:
+   * Never interpolates untrusted text inside double-quoted `powershell -Command "..."` strings.
+   * Instead passes base64-encoded UTF-8 text via environment variable `ORION_TTS_B64` to a temporary `.ps1` file,
+   * and caches synthesized `.wav` files by MD5 hash in `os.tmpdir()/orion_tts_cache` (inspired by Al-Hikmah's MD5 cache).
+   */
   public async speak(text: string): Promise<void> {
     await this.stop();
+    const cleanText = (text || '').trim();
+    if (!cleanText) return;
+
     this.speaking = true;
-    eventBus.emit('speech.started', { text });
-    eventBus.logActivity('SYSTEM_EVENT', `TTS output active: "${text.slice(0, 60)}..."`);
+    eventBus.emit('speech.started', { text: cleanText });
+    eventBus.logActivity('SYSTEM_EVENT', `TTS output active: "${cleanText.slice(0, 60)}..."`);
 
     if (process.platform === 'win32') {
+      const tmpScript = path.join(os.tmpdir(), `orion_tts_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.ps1`);
+      const wavPath = this.getCachedAudioPath(cleanText);
+      const b64Text = Buffer.from(cleanText, 'utf-8').toString('base64');
+      const b64Wav = Buffer.from(wavPath, 'utf-8').toString('base64');
+
+      const psContent = `
+$ErrorActionPreference = 'SilentlyContinue'
+Add-Type -AssemblyName System.Speech
+$textBytes = [System.Convert]::FromBase64String($env:ORION_TTS_B64)
+$plainText = [System.Text.Encoding]::UTF8.GetString($textBytes)
+$wavBytes = [System.Convert]::FromBase64String($env:ORION_TTS_WAV_B64)
+$wavPath = [System.Text.Encoding]::UTF8.GetString($wavBytes)
+
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+if (-not (Test-Path $wavPath)) {
+  try {
+    $synth.SetOutputToWaveFile($wavPath)
+    $synth.Speak($plainText)
+    $synth.SetOutputToNull()
+  } catch {}
+}
+$synth.SetOutputToDefaultAudioDevice()
+$synth.Speak($plainText)
+`;
+
       try {
-        const escaped = text.replace(/'/g, "''").replace(/"/g, '""').replace(/[\r\n]+/g, ' ');
-        const psCommand = `powershell -NoProfile -Command "Add-Type -AssemblyName System.Speech; $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; $synth.Speak('${escaped}')"`;
-        const { exec } = require('child_process');
+        fs.writeFileSync(tmpScript, psContent, 'utf-8');
         await new Promise<void>((resolve) => {
-          this.currentProcess = exec(psCommand, { timeout: 15000 }, () => {
-            this.currentProcess = null;
-            resolve();
-          });
+          this.currentProcess = execFile(
+            'powershell.exe',
+            ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', tmpScript],
+            {
+              timeout: 15000,
+              env: {
+                ...process.env,
+                ORION_TTS_B64: b64Text,
+                ORION_TTS_WAV_B64: b64Wav
+              }
+            },
+            () => {
+              this.currentProcess = null;
+              resolve();
+            }
+          );
         });
-      } catch (err) {
+      } catch {
         // Speech synthesis error handled gracefully
       } finally {
+        try {
+          if (fs.existsSync(tmpScript)) fs.unlinkSync(tmpScript);
+        } catch {}
         this.speaking = false;
         eventBus.emit('speech.stopped', { timestamp: Date.now() });
       }
@@ -133,6 +271,14 @@ export class VoiceService implements IVoiceService {
 
   public setTTSProvider(provider: ITextToSpeechProvider): void {
     this.ttsProvider = provider;
+  }
+
+  public getSTTProvider(): ISpeechToTextProvider {
+    return this.sttProvider;
+  }
+
+  public getTTSProvider(): ITextToSpeechProvider {
+    return this.ttsProvider;
   }
 
   public getVoiceState(): VoiceState {

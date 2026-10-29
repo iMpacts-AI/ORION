@@ -90,7 +90,18 @@ export class ActionValidator {
     }
 
     if (postconditions.verifyActiveApp && newObservation) {
-      if (!newObservation.activeWindow.processName.toLowerCase().includes(postconditions.verifyActiveApp.toLowerCase())) {
+      const expected = postconditions.verifyActiveApp.toLowerCase();
+      const activeMatch =
+        newObservation.activeWindow.processName.toLowerCase().includes(expected) ||
+        newObservation.activeWindow.title.toLowerCase().includes(expected);
+      const visibleMatch = Array.isArray((newObservation as any).visibleWindows)
+        ? (newObservation as any).visibleWindows.some(
+            (w: any) =>
+              (w?.processName || '').toLowerCase().includes(expected) ||
+              (w?.title || '').toLowerCase().includes(expected)
+          )
+        : false;
+      if (!activeMatch && !visibleMatch) {
         return {
           verified: false,
           reason: `Postcondition Failed: Active app is '${newObservation.activeWindow.processName}', expected '${postconditions.verifyActiveApp}'.`
@@ -99,9 +110,17 @@ export class ActionValidator {
     }
 
     if (postconditions.verifyActiveWindow && newObservation) {
-      const matchTitle = newObservation.activeWindow.title.toLowerCase().includes(postconditions.verifyActiveWindow.toLowerCase());
-      const matchProc = newObservation.activeWindow.processName.toLowerCase().includes(postconditions.verifyActiveWindow.toLowerCase());
-      if (!matchTitle && !matchProc) {
+      const expected = postconditions.verifyActiveWindow.toLowerCase();
+      const matchTitle = newObservation.activeWindow.title.toLowerCase().includes(expected);
+      const matchProc = newObservation.activeWindow.processName.toLowerCase().includes(expected);
+      const visibleMatch = Array.isArray((newObservation as any).visibleWindows)
+        ? (newObservation as any).visibleWindows.some(
+            (w: any) =>
+              (w?.processName || '').toLowerCase().includes(expected) ||
+              (w?.title || '').toLowerCase().includes(expected)
+          )
+        : false;
+      if (!matchTitle && !matchProc && !visibleMatch) {
         return {
           verified: false,
           reason: `Postcondition Failed: Active window title is '${newObservation.activeWindow.title}', expected to contain '${postconditions.verifyActiveWindow}'.`

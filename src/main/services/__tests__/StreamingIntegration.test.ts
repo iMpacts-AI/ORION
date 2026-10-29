@@ -30,7 +30,7 @@ class MockStreamAdapter extends OpenAICompatibleAdapter {
   }
 
   // Override fetch execution to simulate HTTP stream behavior deterministically
-  protected async fetchImpl(url: string, init?: RequestInit): Promise<Response> {
+  protected async fetchImpl(_url: string, _init?: RequestInit): Promise<Response> {
     if (this.mockHttpStatus !== 200) {
       return new Response('Mock HTTP Error', { status: this.mockHttpStatus });
     }
@@ -70,12 +70,15 @@ async function runStreamingIntegrationTests() {
 
     // Mock global fetch for this test scope
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+    globalThis.fetch = (async () =>
+      new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })) as typeof fetch;
 
     try {
-      const adapter = new MockStreamAdapter(null);
+      const adapter = new MockStreamAdapter(stream, 200);
       let tokens = '';
-      const result = await adapter.stream('Hello', t => { tokens += t; });
+      const result = await adapter.stream('Hello', t => {
+        tokens += t;
+      });
 
       assert(tokens === 'ORION STREAM', 'Streaming tokens accumulated accurately');
       assert(result === 'ORION STREAM', 'Full stream response string returned');
@@ -87,14 +90,14 @@ async function runStreamingIntegrationTests() {
   // Test 2: Connection Timeout Enforcement
   {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async (_, init) => {
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       // Simulate hanging network connection
-      return new Promise((_, reject) => {
+      return new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => {
           reject(new Error('Aborted by signal'));
         });
       });
-    };
+    }) as typeof fetch;
 
     try {
       const adapter = new MockStreamAdapter(null);
@@ -107,7 +110,10 @@ async function runStreamingIntegrationTests() {
       await adapter.stream('Test Timeout', () => {}, [], timeouts);
       assert(false, 'Connection timeout should have thrown an error');
     } catch (err: any) {
-      assert(err.message.includes('Aborted') || err.message.includes('Timeout'), 'Connection timeout aborted hanging request cleanly');
+      assert(
+        err.message.includes('Aborted') || err.message.includes('Timeout'),
+        'Connection timeout aborted hanging request cleanly'
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -124,10 +130,10 @@ async function runStreamingIntegrationTests() {
     });
 
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => new Response(stream, { status: 200 });
+    globalThis.fetch = (async () => new Response(stream, { status: 200 })) as typeof fetch;
 
     try {
-      const adapter = new MockStreamAdapter(null);
+      const adapter = new MockStreamAdapter(stream, 200);
       const cancelController = new AbortController();
 
       const streamPromise = adapter.stream('Test Cancel', () => {}, [], undefined, cancelController.signal);
@@ -138,7 +144,10 @@ async function runStreamingIntegrationTests() {
       await streamPromise;
       assert(false, 'Cancelled stream should throw abort error');
     } catch (err: any) {
-      assert(err.name === 'AbortError' || err.message.includes('Aborted'), 'External AbortSignal cancelled stream cleanly');
+      assert(
+        err.name === 'AbortError' || err.message.includes('Aborted'),
+        'External AbortSignal cancelled stream cleanly'
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -146,6 +155,7 @@ async function runStreamingIntegrationTests() {
 
   console.log(`\nINTEGRATION TEST RESULTS: ${passed} passed, ${failed} failed.`);
   if (failed > 0) process.exit(1);
+  process.exit(0);
 }
 
 runStreamingIntegrationTests();

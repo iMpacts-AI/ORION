@@ -12,7 +12,9 @@ export function resolveNativeInputExe(): string | null {
     path.join(__dirname, '..', '..', 'platform', 'win32-native-input.exe'),
     path.join(__dirname, '..', 'platform', 'win32-native-input.exe'),
     path.resolve(process.cwd(), 'src/main/platform/win32-native-input.exe'),
-    path.resolve(process.cwd(), 'dist-electron/main/platform/win32-native-input.exe')
+    path.resolve(process.cwd(), 'dist-electron/main/platform/win32-native-input.exe'),
+    path.join(process.resourcesPath || '', 'app', 'src', 'main', 'platform', 'win32-native-input.exe'),
+    path.join(path.dirname(process.execPath || ''), 'resources', 'app', 'src', 'main', 'platform', 'win32-native-input.exe')
   ];
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
@@ -173,6 +175,9 @@ export class WindowsNativeInputDriver implements IInputDriver {
   }
 
   public async typeText(text: string): Promise<void> {
+    if (typeof text !== 'string' || text.includes('\0') || text.length > 4000) {
+      throw new Error('[SECURITY BLOCKED] typeText requires a valid string without null bytes (max 4000 chars).');
+    }
     if (process.platform === 'win32') {
       const exe = this.nativeExePath || resolveNativeInputExe();
       if (exe) {
@@ -182,14 +187,29 @@ export class WindowsNativeInputDriver implements IInputDriver {
         } catch (err) {}
       }
       try {
-        const escaped = text.replace(/[{}+^%~()\[\]]/g, '{$&}').replace(/'/g, "''");
-        const psCommand = `powershell -NoProfile -Command "$wshell = New-Object -ComObject Wscript.Shell; $wshell.SendKeys('${escaped}')"`;
-        await execAsync(psCommand, { timeout: 4000 });
+        const escaped = text.replace(/[{}+^%~()\[\]]/g, '{$&}');
+        await execFileAsync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            '$wshell = New-Object -ComObject Wscript.Shell; $wshell.SendKeys($env:ORION_SENDKEYS_TEXT)'
+          ],
+          {
+            timeout: 4000,
+            windowsHide: true,
+            env: { ...process.env, ORION_SENDKEYS_TEXT: escaped }
+          }
+        );
       } catch (err) {}
     }
   }
 
   public async pressKey(key: string): Promise<void> {
+    if (!key || typeof key !== 'string' || /[;&|`$<>'"\r\n]/.test(key) || key.length > 32) {
+      throw new Error(`[SECURITY BLOCKED] Invalid or unsafe key identifier rejected: '${String(key).slice(0, 32)}'.`);
+    }
     if (process.platform === 'win32') {
       let keyToSend = key;
       const lower = key.toLowerCase();
@@ -212,8 +232,20 @@ export class WindowsNativeInputDriver implements IInputDriver {
         } catch (err) {}
       }
       try {
-        const psCommand = `powershell -NoProfile -Command "$wshell = New-Object -ComObject Wscript.Shell; $wshell.SendKeys('${keyToSend}')"`;
-        await execAsync(psCommand, { timeout: 2000 });
+        await execFileAsync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            '$wshell = New-Object -ComObject Wscript.Shell; $wshell.SendKeys($env:ORION_SENDKEYS_TEXT)'
+          ],
+          {
+            timeout: 2000,
+            windowsHide: true,
+            env: { ...process.env, ORION_SENDKEYS_TEXT: keyToSend }
+          }
+        );
       } catch (err) {}
     }
   }
@@ -227,6 +259,14 @@ export class WindowsNativeInputDriver implements IInputDriver {
   }
 
   public async hotkey(keys: string[]): Promise<void> {
+    if (!Array.isArray(keys) || keys.length === 0 || keys.length > 6) {
+      throw new Error('[SECURITY BLOCKED] hotkey requires a non-empty array of up to 6 key tokens.');
+    }
+    for (const k of keys) {
+      if (!k || typeof k !== 'string' || /[;&|`$<>'"\r\n]/.test(k) || k.length > 24) {
+        throw new Error(`[SECURITY BLOCKED] Invalid or unsafe hotkey token rejected: '${String(k).slice(0, 24)}'.`);
+      }
+    }
     if (process.platform === 'win32') {
       let prefix = '';
       let mainKey = '';
@@ -252,8 +292,20 @@ export class WindowsNativeInputDriver implements IInputDriver {
         } catch (err) {}
       }
       try {
-        const psCommand = `powershell -NoProfile -Command "$wshell = New-Object -ComObject Wscript.Shell; $wshell.SendKeys('${formatted}')"`;
-        await execAsync(psCommand, { timeout: 2000 });
+        await execFileAsync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            '$wshell = New-Object -ComObject Wscript.Shell; $wshell.SendKeys($env:ORION_SENDKEYS_TEXT)'
+          ],
+          {
+            timeout: 2000,
+            windowsHide: true,
+            env: { ...process.env, ORION_SENDKEYS_TEXT: formatted }
+          }
+        );
       } catch (err) {}
     }
   }

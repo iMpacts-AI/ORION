@@ -1,6 +1,6 @@
 import { VisionResult } from '../../shared/types';
-import { desktopCapturer, NativeImage } from 'electron';
 import { eventBus } from '../../shared/events';
+import { ScreenCaptureService } from './computer/ScreenCaptureService';
 
 export interface IVisionProvider {
   id: string;
@@ -105,9 +105,11 @@ export interface IVisionService {
 export class VisionService implements IVisionService {
   public isConfigured = false;
   private visionProvider: IVisionProvider;
+  private screenCaptureService: ScreenCaptureService;
 
-  constructor(visionProvider?: IVisionProvider) {
+  constructor(visionProvider?: IVisionProvider, screenCaptureService?: ScreenCaptureService) {
     this.visionProvider = visionProvider || new DefaultVisionProvider();
+    this.screenCaptureService = screenCaptureService || new ScreenCaptureService();
     this.isConfigured = this.visionProvider.isConfigured;
   }
 
@@ -116,23 +118,16 @@ export class VisionService implements IVisionService {
     this.isConfigured = provider.isConfigured;
   }
 
-  public async captureScreen(): Promise<string | null> {
+  public async captureScreen(options?: { forceFresh?: boolean; signal?: AbortSignal }): Promise<string | null> {
     eventBus.emit('vision.capture.started', { source: 'SCREENSHOT' });
     try {
-      const sources = await desktopCapturer.getSources({
-        types: ['screen'],
-        thumbnailSize: { width: 1920, height: 1080 }
+      const payload = await this.screenCaptureService.captureScreenWithMetadata(options);
+      eventBus.emit('vision.captured', {
+        timestamp: payload.timestamp,
+        imageBufferLength: payload.dataUrl.length
       });
-
-      const primarySource = sources[0];
-      if (!primarySource) {
-        throw new Error('No desktop screen sources available for capture.');
-      }
-
-      const dataUrl = primarySource.thumbnail.toDataURL();
-      eventBus.emit('vision.captured', { timestamp: Date.now(), imageBufferLength: dataUrl.length });
-      eventBus.logActivity('SYSTEM_EVENT', 'Primary screen captured successfully');
-      return dataUrl;
+      eventBus.logActivity('SYSTEM_EVENT', `Primary screen captured successfully (${payload.width}x${payload.height} via ${payload.source})`);
+      return payload.dataUrl;
     } catch (err: any) {
       eventBus.emit('perception.error', { module: 'VISION', error: err.message || 'Screen capture failed' });
       eventBus.logActivity('ERROR_EVENT', `Screen capture error: ${err.message}`);

@@ -5,7 +5,35 @@ const api = {
   getSystemSnapshot: () => ipcRenderer.invoke(ORION_CONSTANTS.IPC.SYSTEM_TELEMETRY),
   getTools: () => ipcRenderer.invoke('tools:get_all'),
   executeTool: (toolCall: any) => ipcRenderer.invoke(ORION_CONSTANTS.IPC.EXECUTE_TOOL, toolCall),
-  processCommand: (query: string, source: 'TEXT' | 'VOICE' = 'TEXT') => ipcRenderer.invoke('orchestrator:process_command', { query, source }),
+  processCommand: (query: string, source: 'TEXT' | 'VOICE' = 'TEXT') =>
+    ipcRenderer.invoke('orchestrator:process_command', { query, source }),
+  cancelCommand: (reason?: string) =>
+    ipcRenderer.invoke('orchestrator:cancel_command', reason),
+  onStreamToken: (callback: (payload: { token: string }) => void) => {
+    const listener = (_: any, data: { token: string }) => callback(data);
+    ipcRenderer.on('orchestrator:stream_token', listener);
+    return () => ipcRenderer.removeListener('orchestrator:stream_token', listener);
+  },
+  onOrchestratorStateChanged: (callback: (payload: { state: string; detail: string }) => void) => {
+    const listener = (_: any, data: { state: string; detail: string }) => callback(data);
+    ipcRenderer.on('orchestrator:state_changed', listener);
+    return () => ipcRenderer.removeListener('orchestrator:state_changed', listener);
+  },
+  onToolStarted: (callback: (toolCall: any) => void) => {
+    const listener = (_: any, data: any) => callback(data);
+    ipcRenderer.on('orchestrator:tool_started', listener);
+    return () => ipcRenderer.removeListener('orchestrator:tool_started', listener);
+  },
+  onToolCompleted: (callback: (result: any) => void) => {
+    const listener = (_: any, data: any) => callback(data);
+    ipcRenderer.on('orchestrator:tool_completed', listener);
+    return () => ipcRenderer.removeListener('orchestrator:tool_completed', listener);
+  },
+  onToolFailed: (callback: (payload: any) => void) => {
+    const listener = (_: any, data: any) => callback(data);
+    ipcRenderer.on('orchestrator:tool_failed', listener);
+    return () => ipcRenderer.removeListener('orchestrator:tool_failed', listener);
+  },
   getAIRouterStatus: () => ipcRenderer.invoke('ai:get_router_status'),
   getAllProviderStatuses: () => ipcRenderer.invoke('ai:get_all_provider_statuses'),
   setAIRoutingStrategy: (strategy: string) => ipcRenderer.invoke('ai:set_routing_strategy', strategy),
@@ -73,21 +101,68 @@ const api = {
     ipcRenderer.invoke('developer:search_code', { targetPath, query }),
   developerExecuteBuild: (targetPath: string, command: string) =>
     ipcRenderer.invoke('developer:execute_build', { targetPath, command }),
-  // Browser Provider Preload Wiring
+  // Browser Provider & Closed-Loop Chrome Harness Preload Wiring
   browserObserve: () => ipcRenderer.invoke('browser:observe'),
   browserNavigate: (url: string, openInExternal?: boolean) =>
     ipcRenderer.invoke('browser:navigate', { url, openInExternal }),
   browserClick: (selector: string) => ipcRenderer.invoke('browser:click', selector),
   browserType: (selector: string, text: string) =>
     ipcRenderer.invoke('browser:type', { selector, text }),
+  browserOpenChrome: (options?: { url?: string; visibleWindow?: boolean; useCdp?: boolean }) =>
+    ipcRenderer.invoke('browser:open_chrome', options || {}),
+  browserSearch: (query: string, useCdpAdapter?: boolean) =>
+    ipcRenderer.invoke('browser:search', { query, useCdpAdapter }),
+  browserOpenTabs: (urls: string[], useCdpAdapter?: boolean) =>
+    ipcRenderer.invoke('browser:open_tabs', { urls, useCdpAdapter }),
+  browserFillForm: (payload: {
+    fields: Record<string, string>;
+    submitSelector?: string;
+    submitForm?: boolean;
+    explicitAuthorization?: boolean;
+  }) => ipcRenderer.invoke('browser:fill_form', payload),
+  browserExecuteClosedLoop: (payload: {
+    goal: string;
+    explicitAuthorization?: boolean;
+    useCdpAdapter?: boolean;
+    visibleWindow?: boolean;
+    formFields?: Record<string, string>;
+    submitSelector?: string;
+    submitForm?: boolean;
+  }) => ipcRenderer.invoke('browser:execute_closed_loop', payload),
+  browserClose: () => ipcRenderer.invoke('browser:close'),
+  onBrowserStageChanged: (callback: (payload: { stage: string; detail: string; timestamp: number }) => void) => {
+    const listener = (_: any, data: { stage: string; detail: string; timestamp: number }) => callback(data);
+    ipcRenderer.on('browser:stage_changed', listener);
+    return () => ipcRenderer.removeListener('browser:stage_changed', listener);
+  },
+  // Active Applications Panel Preload Wiring
+  getActiveAppsState: (forceRefresh?: boolean) =>
+    ipcRenderer.invoke('apps:get_state', { forceRefresh }),
+  focusOrOpenApp: (appId: string, url?: string) =>
+    ipcRenderer.invoke('apps:focus_or_open', { appId, url }),
+  // Multi-Agent Engineering System Preload Wiring
+  getAgentsRoster: () => ipcRenderer.invoke('agents:get_roster'),
+  setActiveAgent: (agentId: string) => ipcRenderer.invoke('agents:set_active', agentId),
+  runAgentTask: (payload: {
+    agentId: string;
+    title?: string;
+    prompt: string;
+    toolCallsToRun?: Array<{ toolId: string; arguments?: Record<string, any> }>;
+  }) => ipcRenderer.invoke('agents:run_task', payload),
+  delegateAgentGoal: (goal: string, targetFile?: string) =>
+    ipcRenderer.invoke('agents:delegate', { goal, targetFile }),
+  cancelAgentTask: (taskId: string, reason?: string) =>
+    ipcRenderer.invoke('agents:cancel_task', { taskId, reason }),
+  // Security & Approvals Preload Wiring
+  getSecurityStatus: () => ipcRenderer.invoke('security:get_status'),
+  getPendingApprovals: () => ipcRenderer.invoke('approvals:get_pending'),
+  approvePendingRequest: (approvalId?: string) => ipcRenderer.invoke('approvals:approve', approvalId),
+  denyPendingRequest: (approvalId?: string) => ipcRenderer.invoke('approvals:deny', approvalId),
   // Coders HQ Showcase & Demo Preload Channels
   getDemoHealthCheck: () => ipcRenderer.invoke('demo:get_health_check'),
   resetDemo: () => ipcRenderer.invoke('demo:reset'),
   getInitialMode: () => ipcRenderer.invoke('app:get_initial_mode')
 };
-
-
-
 
 contextBridge.exposeInMainWorld('orionApi', api);
 contextBridge.exposeInMainWorld('arvisApi', api); // Backwards compatibility alias

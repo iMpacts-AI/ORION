@@ -19,7 +19,7 @@ async function runTitanHUDIntegrationTests() {
     }
   }
 
-  const titanRootDir = 'C:\\Users\\smsaq\\Project_Titan';
+  const titanRootDir = (process.env.ORION_TITAN_WORKSPACE || 'C:\\Users\\operator\\Project_Titan');
 
   // 1. Pipeline Triggering Through Intended API
   {

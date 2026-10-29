@@ -3,6 +3,9 @@ import { ActionRiskEvaluator } from './ActionRiskEvaluator';
 import { ActionValidator } from './ActionValidator';
 import { ComputerPerceptionService } from './ComputerPerceptionService';
 import { ToolService } from './ToolService';
+import { ProcessSupervisor } from './computer/ProcessSupervisor';
+import { ComputerPermissionService } from './computer/ComputerPermissionService';
+import { SecurityPolicyMiddleware } from './SecurityPolicyMiddleware';
 import { ToolCall } from '../../shared/types';
 import { eventBus } from '../../shared/events';
 
@@ -11,25 +14,106 @@ export class ComputerActionService {
   private validator: ActionValidator;
   private perceptionService: ComputerPerceptionService;
   private toolService: ToolService;
+  private permissionService: ComputerPermissionService;
 
   constructor(
     perceptionService: ComputerPerceptionService,
     toolService: ToolService,
     riskEvaluator?: ActionRiskEvaluator,
-    validator?: ActionValidator
+    validator?: ActionValidator,
+    permissionService?: ComputerPermissionService
   ) {
     this.perceptionService = perceptionService;
     this.toolService = toolService;
     this.riskEvaluator = riskEvaluator || new ActionRiskEvaluator();
     this.validator = validator || new ActionValidator();
+    this.permissionService =
+      permissionService ||
+      this.toolService?.getComputerUseService?.()?.getPermissionService?.() ||
+      ComputerPermissionService.getInstance();
+  }
+
+  public getPermissionService(): ComputerPermissionService {
+    return this.permissionService;
   }
 
   public async executeAction(action: ComputerAction): Promise<ActionResult> {
     const startTime = Date.now();
 
-    // 1. Authoritative Risk Evaluation
-    const evaluatedRisk = this.riskEvaluator.evaluateRisk(action.type, action.payload);
+    if (!action || typeof action !== 'object' || !action.type || typeof action.type !== 'string') {
+      return {
+        actionId: (action as any)?.id || 'unknown',
+        success: false,
+        preconditionsMet: false,
+        postconditionsVerified: false,
+        error: 'CRITICAL: Malformed or missing ComputerAction representation.',
+        timestamp: Date.now()
+      };
+    }
+
+    // 0. Global Emergency Stop Enforcement
+    if (
+      ProcessSupervisor.getInstance().isEstopActive() ||
+      this.permissionService.isEmergencyStopped() ||
+      this.toolService.getComputerUseService().isEmergencyStopped()
+    ) {
+      eventBus.logActivity('ERROR_EVENT', `Computer Action '${action.type}' BLOCKED by active Emergency Stop`);
+      return {
+        actionId: action.id,
+        success: false,
+        preconditionsMet: false,
+        postconditionsVerified: false,
+        error: 'Execution BLOCKED: ORION Emergency Stop is active.',
+        timestamp: Date.now()
+      };
+    }
+
+    // 1. Authoritative Risk Evaluation (inspecting payload, parameters, and target consistently)
+    if (this.riskEvaluator.hasConflictingTargets(action.payload, action.parameters, action.target)) {
+      eventBus.logActivity('ERROR_EVENT', `Computer Action '${action.type}' BLOCKED due to conflicting payload vs parameters target values`);
+      return {
+        actionId: action.id,
+        success: false,
+        preconditionsMet: false,
+        postconditionsVerified: false,
+        error: 'CRITICAL: Conflicting target parameters detected between action.payload and action.parameters. Execution blocked.',
+        timestamp: Date.now()
+      };
+    }
+
+    const evaluatedRisk = this.riskEvaluator.evaluateRisk(
+      action.type,
+      action.payload,
+      action.parameters,
+      action.target
+    );
     action.riskLevel = evaluatedRisk;
+
+    if (evaluatedRisk === 'CRITICAL') {
+      eventBus.logActivity('ERROR_EVENT', `Computer Action '${action.type}' BLOCKED by safety policy (CRITICAL rating)`);
+      return {
+        actionId: action.id,
+        success: false,
+        preconditionsMet: false,
+        postconditionsVerified: false,
+        error: 'Critical action prohibited by ORION safety policy (Protected Master / System Directory / Credential protection).',
+        timestamp: Date.now()
+      };
+    }
+
+    // Authoritative central permission gate: setting action.requiresApproval = false can NEVER bypass HIGH_RISK policy
+    const permDecision = this.permissionService.evaluateActionPermission(action, { consumeApproval: true });
+    if (!permDecision.allowed) {
+      eventBus.logActivity('ERROR_EVENT', `Computer Action '${action.type}' BLOCKED awaiting explicit approval (${evaluatedRisk})`);
+      return {
+        actionId: action.id,
+        success: false,
+        preconditionsMet: false,
+        postconditionsVerified: false,
+        error: `AUTHORIZATION REQUIRED: HIGH_RISK action '${action.type}' requires explicit user approval before execution. ${permDecision.reason || ''}`.trim(),
+        timestamp: Date.now()
+      };
+    }
 
     eventBus.logActivity('TOOL_EXECUTION', `Executing Computer Action '${action.type}' (Risk Rating: ${evaluatedRisk})`);
 
@@ -56,11 +140,12 @@ export class ComputerActionService {
 
     try {
       if (action.type === 'READ_FILE') {
+        const targetFilePath = action.payload?.filePath || action.parameters?.filePath || action.payload?.path || action.parameters?.path || action.target;
         const toolCall: ToolCall = {
           id: 'call_act_' + action.id,
           toolId: 'file.read_text',
           toolName: 'Read Text File',
-          arguments: { filePath: action.payload?.filePath },
+          arguments: { filePath: targetFilePath },
           timestamp: Date.now(),
           requiresUserApproval: false
         };
@@ -69,11 +154,13 @@ export class ComputerActionService {
         execData = toolRes.data;
         execError = toolRes.error;
       } else if (action.type === 'WRITE_FILE') {
+        const targetFilePath = action.payload?.filePath || action.parameters?.filePath || action.payload?.path || action.parameters?.path || action.target;
+        const targetContent = action.payload?.content ?? action.parameters?.content;
         const toolCall: ToolCall = {
           id: 'call_act_' + action.id,
           toolId: 'file.write_text',
           toolName: 'Write Text File',
-          arguments: { filePath: action.payload?.filePath, content: action.payload?.content },
+          arguments: { filePath: targetFilePath, content: targetContent },
           timestamp: Date.now(),
           requiresUserApproval: false
         };

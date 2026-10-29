@@ -34,7 +34,7 @@ async function runComputerPermissionTests() {
     const check = service.evaluateActionPermission({
       id: 'act_perm_crit',
       type: 'WRITE_FILE',
-      payload: { filePath: 'C:\\Users\\smsaq\\Project_Titan\\07_Video_Projects\\5_Render_Exports\\Video_001_Nvidia_CUDA_Moat_Master_4K.mp4' },
+      payload: { filePath: 'C:\\Users\\operator\\Project_Titan\\07_Video_Projects\\5_Render_Exports\\Video_001_Nvidia_CUDA_Moat_Master_4K.mp4' },
       confidence: 0.99,
       riskLevel: 'CRITICAL'
     });
@@ -49,7 +49,7 @@ async function runComputerPermissionTests() {
     const check = service.evaluateActionPermission({
       id: 'act_perm_high',
       type: 'WRITE_FILE',
-      payload: { filePath: 'C:\\Users\\smsaq\\Downloads\\ORION\\temp.txt' },
+      payload: { filePath: 'C:\\Users\\operator\\Downloads\\ORION\\temp.txt' },
       confidence: 0.95,
       riskLevel: 'HIGH_RISK'
     });
@@ -63,7 +63,7 @@ async function runComputerPermissionTests() {
     const approvedCheck = service.evaluateActionPermission({
       id: 'act_perm_high',
       type: 'WRITE_FILE',
-      payload: { filePath: 'C:\\Users\\smsaq\\Downloads\\ORION\\temp.txt' },
+      payload: { filePath: 'C:\\Users\\operator\\Downloads\\ORION\\temp.txt' },
       confidence: 0.95,
       riskLevel: 'HIGH_RISK'
     });
@@ -86,6 +86,52 @@ async function runComputerPermissionTests() {
 
     service.resetEmergencyStop();
     assert(service.isEmergencyStopped() === false, 'Emergency Stop can be cleanly reset by operator');
+  }
+
+  // 5. Consistent inspection across action.parameters, action.payload, and action.target (Defect D-04 regression)
+  {
+    const paramEnvCheck = service.evaluateActionPermission({
+      id: 'act_perm_params_env',
+      type: 'READ_FILE',
+      parameters: { filePath: 'C:\\Users\\operator\\iMpacts-repos\\ORION\\.env' },
+      riskLevel: 'READ_ONLY'
+    });
+    assert(
+      paramEnvCheck.allowed === false && paramEnvCheck.riskLevel === 'CRITICAL',
+      'Action with .env path in action.parameters (without action.payload) is strictly BLOCKED as CRITICAL'
+    );
+
+    const targetSshCheck = service.evaluateActionPermission({
+      id: 'act_perm_target_ssh',
+      type: 'READ_FILE',
+      target: 'C:\\Users\\operator\\.ssh\\id_rsa',
+      riskLevel: 'READ_ONLY'
+    });
+    assert(
+      targetSshCheck.allowed === false && targetSshCheck.riskLevel === 'CRITICAL',
+      'Action with .ssh/id_rsa path in top-level action.target is strictly BLOCKED as CRITICAL'
+    );
+
+    const missingParamsWriteCheck = service.evaluateActionPermission({
+      id: 'act_perm_missing_write',
+      type: 'WRITE_FILE',
+      riskLevel: 'LOW_RISK'
+    });
+    assert(
+      missingParamsWriteCheck.allowed === false && missingParamsWriteCheck.riskLevel === 'CRITICAL',
+      'WRITE_FILE action missing target path parameters is strictly BLOCKED as CRITICAL'
+    );
+
+    const malformedActionCheck = service.evaluateActionPermission({
+      id: 'act_malformed',
+      type: '' as any,
+      payload: 'not-an-object' as any,
+      riskLevel: 'LOW_RISK'
+    });
+    assert(
+      malformedActionCheck.allowed === false && malformedActionCheck.riskLevel === 'CRITICAL',
+      'Malformed action representation is strictly BLOCKED as CRITICAL'
+    );
   }
 
   console.log(`\nCOMPUTER PERMISSION SUITE RESULTS: ${passed} passed, ${failed} failed.`);

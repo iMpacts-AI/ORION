@@ -123,6 +123,15 @@ export interface ToolParameterSchema {
 
 export type VerificationStatus = 'EXECUTED' | 'VERIFIED' | 'PARTIALLY_VERIFIED' | 'FAILED' | 'UNKNOWN';
 
+export type TaskOutcomeStatus =
+  | 'completed_verified'
+  | 'launched_unverified'
+  | 'partially_completed'
+  | 'permission_required'
+  | 'cancelled'
+  | 'timed_out'
+  | 'failed';
+
 export interface Observation {
   executionId: string;
   toolCallId: string;
@@ -169,6 +178,7 @@ export interface ToolResult {
   success: boolean;
   verificationStatus: VerificationStatus;
   verified?: boolean;
+  outcomeStatus?: TaskOutcomeStatus;
   data?: any;
   error?: string;
   observation?: Observation;

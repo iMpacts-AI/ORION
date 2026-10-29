@@ -133,7 +133,11 @@ export class ToolDependencyGraph {
 
   public markFailed(stepNumber: number): void {
     const node = this.nodes.get(stepNumber);
-    if (node) node.failed = true;
+    if (!node || node.failed) return;
+    node.failed = true;
+    for (const depStepNum of node.dependents) {
+      this.markFailed(depStepNum);
+    }
   }
 
   public isFinished(): boolean {

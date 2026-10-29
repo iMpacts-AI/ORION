@@ -4,7 +4,7 @@ import { VoiceService } from './VoiceService';
 import { ConversationMemoryService } from './ConversationMemoryService';
 import { ExecutionContext, ToolDependencyGraph } from './ExecutionContext';
 import { IAIProvider, LocalHeuristicAIProvider, AIPlanStep } from './AIProvider';
-import { ToolCall, ToolResult, AssistantState, OrionMode, VisionResult, CommandTelemetryMetrics } from '../../shared/types';
+import { ToolCall, ToolResult, AssistantState, OrionMode, VisionResult, CommandTelemetryMetrics, TaskOutcomeStatus } from '../../shared/types';
 import { eventBus } from '../../shared/events';
 
 import { ContextBuilder } from './ContextBuilder';
@@ -22,6 +22,8 @@ export interface ProcessCommandResult {
   query: string;
   response: string;
   success: boolean;
+  verified?: boolean;
+  outcomeStatus?: TaskOutcomeStatus;
   toolCallsExecuted: ToolCall[];
   toolResults: ToolResult[];
   visionResult?: VisionResult;
@@ -29,6 +31,11 @@ export interface ProcessCommandResult {
   suggestedMode?: OrionMode;
   metrics: CommandTelemetryMetrics;
   activeTask?: AgentTask;
+}
+
+export interface ProcessCommandOptions {
+  onToken?: (token: string) => void;
+  signal?: AbortSignal;
 }
 
 export class OrionOrchestrator {
@@ -96,17 +103,87 @@ export class OrionOrchestrator {
     return this.actionService;
   }
 
+  public getContextBuilder(): ContextBuilder {
+    return this.contextBuilder;
+  }
+
   public getState(): AssistantState {
     return this.stateMachine.getState();
   }
 
+  private activeTraceId?: string;
+
   private updateState(newState: AssistantState): void {
     this.stateMachine.transitionTo(newState);
+    if (this.activeTraceId) {
+      this.traceService.recordStateTransition(this.activeTraceId, newState);
+    }
   }
 
-  public async processCommand(query: string, source: 'TEXT' | 'VOICE' = 'TEXT'): Promise<ProcessCommandResult> {
+  private async generateResponseWithOptionalStreaming(
+    prompt: string,
+    formattedHistory: Array<{ role: string; content: string }>,
+    options?: ProcessCommandOptions,
+    metrics?: CommandTelemetryMetrics
+  ): Promise<string> {
+    if (options?.signal?.aborted) {
+      throw new Error('Operation cancelled by AbortSignal before response generation.');
+    }
+
+    const onToken = options?.onToken;
+    if (onToken && typeof this.aiProvider.stream === 'function') {
+      const startStream = Date.now();
+      let ttftRecorded = false;
+      const wrappedToken = (token: string) => {
+        if (options?.signal?.aborted) {
+          throw new Error('Stream cancelled by AbortSignal.');
+        }
+        if (!ttftRecorded && metrics) {
+          metrics.aiTtftMs = Date.now() - startStream;
+          ttftRecorded = true;
+        }
+        onToken(token);
+      };
+
+      const streamedText = await this.aiProvider.stream(
+        prompt,
+        wrappedToken,
+        formattedHistory,
+        undefined,
+        options?.signal
+      );
+
+      if (options?.signal?.aborted) {
+        throw new Error('Stream cancelled by AbortSignal.');
+      }
+
+      // If stream fell back to non-streaming chat without emitting tokens, emit the full response once
+      if (!ttftRecorded && streamedText) {
+        onToken(streamedText);
+      }
+
+      return streamedText;
+    }
+
+    const resp = await this.aiProvider.chat(prompt, formattedHistory, options?.signal);
+    if (options?.signal?.aborted) {
+      throw new Error('Operation cancelled by AbortSignal.');
+    }
+    if (onToken && resp) {
+      onToken(resp);
+    }
+    return resp;
+  }
+
+  public async processCommand(
+    query: string,
+    source: 'TEXT' | 'VOICE' = 'TEXT',
+    options?: ProcessCommandOptions
+  ): Promise<ProcessCommandResult> {
     const startCmdTime = Date.now();
-    const timeoutMs = 30000;
+    const timeoutMs = 45000;
+    const activeTrace = this.traceService.createTrace(query);
+    this.activeTraceId = activeTrace.traceId;
 
     const metrics: CommandTelemetryMetrics = {
       totalCommandLatencyMs: 0,
@@ -144,8 +221,13 @@ export class OrionOrchestrator {
     let visionRes: VisionResult | undefined;
     let responseText = '';
     let suggestedMode: OrionMode | undefined;
+    let commandFailed = false;
 
     try {
+      if (options?.signal?.aborted) {
+        throw new Error('Operation cancelled by AbortSignal.');
+      }
+
       const processPromise = async () => {
         const lower = query.toLowerCase();
 
@@ -175,6 +257,9 @@ export class OrionOrchestrator {
           } else {
             responseText = `ORION Vision Provider is currently NOT CONFIGURED for external screen analysis. Screen capture executed successfully (${visionRes.analysis.source}).`;
           }
+          if (options?.onToken && responseText) {
+            options.onToken(responseText);
+          }
         } else {
           // Navigation Mode Triggers
           if (lower.includes('system') || lower.includes('show system')) suggestedMode = 'SYSTEM';
@@ -190,6 +275,7 @@ export class OrionOrchestrator {
           const availableToolIds = resolvedTools.map(t => t.id);
           const plan = await this.aiProvider.plan(query, availableToolIds);
           metrics.planningLatencyMs = Date.now() - startPlanTime;
+          this.traceService.recordPlan(activeTrace.traceId, plan);
 
           // Step 3: Tool Execution Loop (DAG Dependency Graph & Concurrency Support)
           if (plan.steps.length > 0) {
@@ -198,6 +284,10 @@ export class OrionOrchestrator {
             const contextStepOutputs = new Map<number, any>();
 
             while (!graph.isFinished()) {
+              if (options?.signal?.aborted) {
+                throw new Error('Operation cancelled by AbortSignal.');
+              }
+
               const batches = graph.getExecutableBatches();
               if (batches.length === 0) break; // Deadlock or finished
 
@@ -230,9 +320,11 @@ export class OrionOrchestrator {
                     };
 
                     executedCalls.push(call);
+                    this.traceService.recordToolCall(activeTrace.traceId, call);
                     eventBus.emit('assistant.tool.started', { toolCall: call });
-                    const res = await this.toolService.executeTool(call);
+                    const res = await this.toolService.executeTool(call, { signal: options?.signal });
                     results.push(res);
+                    this.traceService.recordToolResult(activeTrace.traceId, res);
 
                     if (res.success) {
                       eventBus.emit('assistant.tool.completed', { result: res });
@@ -249,6 +341,10 @@ export class OrionOrchestrator {
                 } else {
                   // Sequential Execution for Dependent / Non-Readonly Steps with Replanning Recovery
                   for (const step of batch) {
+                    if (options?.signal?.aborted) {
+                      throw new Error('Operation cancelled by AbortSignal.');
+                    }
+
                     const tool = this.toolService.getTools().find(t => t.id === step.toolToCall);
                     if (!tool) {
                       eventBus.emit('assistant.tool.failed', { toolCallId: 'unknown', error: `Tool '${step.toolToCall}' not registered.` });
@@ -285,20 +381,43 @@ export class OrionOrchestrator {
                     };
 
                     executedCalls.push(call);
+                    this.traceService.recordToolCall(activeTrace.traceId, call);
                     eventBus.emit('assistant.tool.started', { toolCall: call });
                     eventBus.logActivity('TOOL_EXECUTION', `Executing tool '${tool.name}'`, { args: call.arguments });
 
-                    let res = await this.toolService.executeTool(call);
+                    let res = await this.toolService.executeTool(call, { signal: options?.signal });
 
-                    // Autonomous Tool Failure Recovery & Replanning Attempt
-                    if (!res.success && metrics.replanningCount < 2) {
+                    if (options?.signal?.aborted || /cancelled/i.test(String(res.error || ''))) {
+                      results.push(res);
+                      this.traceService.recordToolResult(activeTrace.traceId, res);
+                      throw new Error('Operation cancelled by AbortSignal.');
+                    }
+
+                    // Autonomous Tool Failure Recovery & Replanning Attempt (bounded, never bypasses security/auth/cancellation)
+                    const isNonRecoverablePolicyOrAuth =
+                      /SECURITY POLICY VIOLATION|AUTHORIZATION REQUIRED|PAUSED_FOR_USER_AUTH|PERMISSION_BLOCKED|Emergency Stop|SCHEMA VALIDATION FAILED/i.test(
+                        String(res.error || '')
+                      );
+                    if (
+                      !res.success &&
+                      !isNonRecoverablePolicyOrAuth &&
+                      metrics.replanningCount < 2 &&
+                      !options?.signal?.aborted
+                    ) {
                       metrics.replanningCount++;
                       eventBus.logActivity('ERROR_EVENT', `Tool '${tool.name}' failed. Initiating autonomous replanning attempt #${metrics.replanningCount}...`);
                       
                       try {
                         const replanPrompt = `Step ${step.stepNumber} calling '${tool.id}' failed with error: "${res.error}". Suggest an alternative tool execution plan to complete: "${query}".`;
                         const revisedPlan = await this.aiProvider.plan(replanPrompt, availableToolIds);
-                        if (revisedPlan.steps.length > 0 && revisedPlan.steps[0].toolToCall !== tool.id) {
+                        this.traceService.recordPlan(activeTrace.traceId, revisedPlan);
+                        if (
+                          !options?.signal?.aborted &&
+                          revisedPlan.steps.length > 0 &&
+                          revisedPlan.steps[0].toolToCall &&
+                          revisedPlan.steps[0].toolToCall !== tool.id &&
+                          availableToolIds.includes(revisedPlan.steps[0].toolToCall)
+                        ) {
                           const altStep = revisedPlan.steps[0];
                           const altTool = this.toolService.getTools().find(t => t.id === altStep.toolToCall);
                           if (altTool) {
@@ -311,8 +430,9 @@ export class OrionOrchestrator {
                               requiresUserApproval: false
                             };
                             executedCalls.push(altCall);
+                            this.traceService.recordToolCall(activeTrace.traceId, altCall);
                             eventBus.logActivity('TOOL_EXECUTION', `Executing alternative tool '${altTool.name}'`);
-                            res = await this.toolService.executeTool(altCall);
+                            res = await this.toolService.executeTool(altCall, { signal: options?.signal });
                           }
                         }
                       } catch (replanErr) {
@@ -321,6 +441,7 @@ export class OrionOrchestrator {
                     }
 
                     results.push(res);
+                    this.traceService.recordToolResult(activeTrace.traceId, res);
 
                     if (res.success) {
                       eventBus.emit('assistant.tool.completed', { result: res });
@@ -340,41 +461,103 @@ export class OrionOrchestrator {
             metrics.toolExecutionLatencyMs = Date.now() - startToolExecTime;
           }
 
-          // Step 4: Synthesize Final Response using ContextBuilder & Structured Observations
+          // Step 4: Synthesize Final Response using ContextBuilder, Relevant Persisted Memories, & Structured Observations
           const startAiGen = Date.now();
           const historyTurns = this.memoryService.getTurns();
-          const observations: Observation[] = results.map(r => ({
-            executionId: 'exec_' + Math.random().toString(36).substring(2, 9),
-            toolCallId: r.toolCallId,
-            timestamp: r.timestamp,
-            source: r.toolId,
-            trustLevel: 'UNTRUSTED_EXTERNAL',
-            data: r.data,
-            summary: r.success ? `Tool ${r.toolId} executed successfully` : `Tool ${r.toolId} failed: ${r.error}`,
-            verificationStatus: r.verificationStatus || 'UNKNOWN'
-          }));
+          const unifiedMemory = typeof (this.toolService as any).getUnifiedMemory === 'function'
+            ? (this.toolService as any).getUnifiedMemory()
+            : undefined;
+          const relevantMemories = unifiedMemory ? unifiedMemory.queryMemories(query, 5) : [];
+
+          const observations: Observation[] = results.map(r => {
+            const obs: Observation = {
+              executionId: 'exec_' + Math.random().toString(36).substring(2, 9),
+              toolCallId: r.toolCallId,
+              timestamp: r.timestamp,
+              source: r.toolId,
+              trustLevel: 'UNTRUSTED_EXTERNAL',
+              data: r.data,
+              summary: r.success ? `Tool ${r.toolId} executed successfully` : `Tool ${r.toolId} failed: ${r.error}`,
+              verificationStatus: r.verificationStatus || 'UNKNOWN'
+            };
+            this.traceService.recordObservation(activeTrace.traceId, obs);
+            return obs;
+          });
 
           if (results.length > 0) {
-            const firstResult = results[0];
-            if (firstResult.success) {
-              const synthesisPrompt = this.contextBuilder.buildSynthesisContext(query, historyTurns, observations, this.taskMemory.getCurrentTask());
+            const succeededResults = results.filter(r => r.success);
+            const failedResults = results.filter(r => !r.success);
+
+            if (failedResults.length === 0) {
+              const synthesisPrompt = this.contextBuilder.buildSynthesisContext(
+                query,
+                historyTurns,
+                observations,
+                this.taskMemory.getCurrentTask(),
+                relevantMemories
+              );
 
               try {
-                responseText = await this.aiProvider.chat(synthesisPrompt, this.memoryService.getFormattedHistory());
-              } catch (e) {
-                responseText = `[ORION INTEL] ${JSON.stringify(firstResult.data, null, 2)}`;
+                responseText = await this.generateResponseWithOptionalStreaming(
+                  synthesisPrompt,
+                  this.memoryService.getFormattedHistory(),
+                  options,
+                  metrics
+                );
+              } catch (e: any) {
+                if (options?.signal?.aborted || /abort|cancel/i.test(e?.message || '')) {
+                  throw e;
+                }
+                responseText = `[ORION INTEL] ${JSON.stringify(results[0].data, null, 2)}`;
+                if (options?.onToken) options.onToken(responseText);
               }
+
+              const anyUnverified = results.some(
+                r =>
+                  r.verified === false ||
+                  r.outcomeStatus === 'launched_unverified' ||
+                  (r.verificationStatus !== 'VERIFIED' && r.verificationStatus !== undefined)
+              );
+              if (anyUnverified && !/unverified/i.test(responseText)) {
+                responseText = `${responseText}\n[Verification Notice: Action launched/issued; postcondition state remained unverified.]`;
+              }
+            } else if (succeededResults.length > 0) {
+              commandFailed = true;
+              const completedList = succeededResults.map(r => r.toolId).join(', ');
+              const failedDetail = failedResults
+                .map(r => `${r.toolId}: ${r.error || 'Execution failed'}`)
+                .join('; ');
+              responseText = `ORION partially completed the request (succeeded: ${completedList}), then halted on failure (${failedDetail}).`;
             } else {
-              responseText = `ORION was unable to complete the request: ${firstResult.error}`;
+              commandFailed = true;
+              responseText = `ORION was unable to complete the request: ${failedResults[0].error}`;
             }
           } else {
-            responseText = await this.aiProvider.chat(query, this.memoryService.getFormattedHistory());
+            const unsupported = LocalHeuristicAIProvider.detectUnsupportedCapability(query);
+            if (unsupported.unsupported) {
+              commandFailed = true;
+              responseText = `UNSUPPORTED CAPABILITY: ORION does not have a verified native tool for ${unsupported.capability} (${unsupported.reason}). No system mutation or external action was executed. Use /tools to inspect the registered authoritative tools.`;
+            } else {
+              const promptWithMemory = relevantMemories.length > 0
+                ? this.contextBuilder.buildSynthesisContext(query, historyTurns, [], this.taskMemory.getCurrentTask(), relevantMemories)
+                : query;
+              responseText = await this.generateResponseWithOptionalStreaming(
+                promptWithMemory,
+                this.memoryService.getFormattedHistory(),
+                options,
+                metrics
+              );
+            }
           }
           metrics.aiTotalGenerationLatencyMs = Date.now() - startAiGen;
         }
 
         // Step 5: Record Assistant Response in Memory, Mark Task Completed, & Trigger TTS Speech (VOICE only)
-        this.taskSupervisor.updateProgress(activeTaskRecord.taskId, 100, { responseText });
+        if (!commandFailed) {
+          this.taskSupervisor.updateProgress(activeTaskRecord.taskId, 100, { responseText });
+        } else {
+          this.taskSupervisor.handleTaskFailure(activeTaskRecord.taskId, responseText);
+        }
         this.memoryService.addTurn({ role: 'assistant', content: responseText, toolResults: results });
         this.updateState('SPEAKING');
         eventBus.logActivity('TASK_COMPLETE', `ORION response: ${responseText.slice(0, 120)}...`);
@@ -390,19 +573,92 @@ export class OrionOrchestrator {
       ]);
 
     } catch (err: any) {
-      this.updateState('ERROR');
-      eventBus.logActivity('ERROR_EVENT', `Orchestrator failure: ${err.message}`);
-      responseText = `ORION Error: ${err.message}`;
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      commandFailed = true;
+      const isCancelled =
+        Boolean(options?.signal?.aborted) ||
+        /cancelled by abortsignal|aborted by signal|task cancelled/i.test(String(err?.message || ''));
+      if (isCancelled) {
+        this.updateState('STANDBY');
+        this.taskSupervisor.cancelTask(activeTaskRecord.taskId);
+        eventBus.logActivity('SYSTEM_EVENT', `Task cancelled by operator: ${query}`);
+        responseText = 'Task cancelled.';
+      } else {
+        this.updateState('ERROR');
+        this.taskSupervisor.handleTaskFailure(activeTaskRecord.taskId, err.message || 'Execution error');
+        eventBus.logActivity('ERROR_EVENT', `Orchestrator failure: ${err.message}`);
+        responseText = `ORION Error: ${err.message}`;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     } finally {
       this.updateState('STANDBY');
       metrics.totalCommandLatencyMs = Date.now() - startCmdTime;
+      const allToolsSucceeded = results.length === 0 || results.every(r => r.success && r.verificationStatus !== 'FAILED');
+      const overallSuccess =
+        !commandFailed &&
+        !responseText.startsWith('ORION Error:') &&
+        !responseText.startsWith('ORION was unable to complete') &&
+        allToolsSucceeded;
+      this.traceService.completeTrace(activeTrace.traceId, overallSuccess, metrics);
+      this.activeTraceId = undefined;
     }
+
+    const allToolsSucceeded =
+      results.length === 0 || results.every(r => r.success && r.verificationStatus !== 'FAILED');
+    const overallSuccess =
+      !commandFailed &&
+      !responseText.startsWith('ORION Error:') &&
+      !responseText.startsWith('ORION was unable to complete') &&
+      !responseText.startsWith('ORION partially completed') &&
+      responseText !== 'Task cancelled.' &&
+      allToolsSucceeded;
+
+    const allVerified =
+      overallSuccess &&
+      (results.length === 0 ||
+        results.every(
+          r =>
+            r.verified !== false &&
+            r.outcomeStatus !== 'launched_unverified' &&
+            r.verificationStatus === 'VERIFIED'
+        ));
+
+    const outcomeStatus: TaskOutcomeStatus = (() => {
+      if (
+        responseText === 'Task cancelled.' ||
+        Boolean(options?.signal?.aborted) ||
+        results.some(r => r.outcomeStatus === 'cancelled' || /Execution CANCELLED/i.test(r.error || ''))
+      ) {
+        return 'cancelled';
+      }
+      if (
+        /timed out/i.test(responseText) ||
+        results.some(r => r.outcomeStatus === 'timed_out' || /TIMED_OUT|timed out/i.test(r.error || ''))
+      ) {
+        return 'timed_out';
+      }
+      if (
+        results.some(
+          r =>
+            r.outcomeStatus === 'permission_required' ||
+            /AUTHORIZATION REQUIRED|PAUSED_FOR_USER_AUTH/i.test(r.error || '') ||
+            Boolean(r.data?.pendingApprovalId)
+        )
+      ) {
+        return 'permission_required';
+      }
+      if (!overallSuccess) {
+        const anySucceeded = results.some(r => r.success);
+        return anySucceeded ? 'partially_completed' : 'failed';
+      }
+      return allVerified ? 'completed_verified' : 'launched_unverified';
+    })();
 
     return {
       query,
       response: responseText,
-      success: !responseText.startsWith('ORION Error:'),
+      success: overallSuccess,
+      verified: allVerified,
+      outcomeStatus,
       toolCallsExecuted: executedCalls,
       toolResults: results,
       visionResult: visionRes,

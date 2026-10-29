@@ -25,7 +25,8 @@ import {
   ProviderStatus,
   TaskCategory,
   IntentClassification,
-  AIPlan
+  AIPlan,
+  LocalHeuristicAIProvider
 } from './AIProvider';
 import { SSEParser, StreamTimeoutConfig, DEFAULT_STREAM_TIMEOUTS } from './SSEParser';
 
@@ -152,11 +153,20 @@ export abstract class BaseCloudProviderAdapter implements IAIProvider {
       } else {
         cooldownMs = 60000; // 60s default
       }
-    } else if (classification === 'INVALID_KEY' || classification === 'NOT_CONFIGURED') {
-      cooldownMs = 3600000; // 1 hour for bad credentials
+    } else if (classification === 'INVALID_KEY' || classification === 'NOT_CONFIGURED' || classification === 'FORBIDDEN' || classification === 'UNAUTHORIZED') {
+      cooldownMs = 3600000; // 1 hour for bad credentials / expired OAuth tokens
+    } else if (classification === 'NETWORK_ERROR') {
+      cooldownMs = 30000; // 30s cooldown when endpoint is unreachable
     }
 
-    if (this.status.consecutiveFailures >= 2 || classification === 'RATE_LIMITED' || classification === 'INVALID_KEY') {
+    if (
+      this.status.consecutiveFailures >= 2 ||
+      classification === 'RATE_LIMITED' ||
+      classification === 'INVALID_KEY' ||
+      classification === 'FORBIDDEN' ||
+      classification === 'UNAUTHORIZED' ||
+      classification === 'NETWORK_ERROR'
+    ) {
       this.status.isHealthy = false;
       this.status.cooldownUntil = Date.now() + cooldownMs;
     }
@@ -166,6 +176,64 @@ export abstract class BaseCloudProviderAdapter implements IAIProvider {
 
   public async classifyIntent(prompt: string): Promise<IntentClassification> {
     const lower = prompt.toLowerCase().trim();
+    if (LocalHeuristicAIProvider.detectUnsupportedCapability(prompt).unsupported) {
+      return { intent: 'CONVERSATION', confidence: 0.99 };
+    }
+
+    const urlInPrompt = prompt.match(/https?:\/\/[^\s"'<>]+/i);
+    if (
+      urlInPrompt &&
+      (lower.includes('open ') || lower.includes('navigate ') || lower.includes('go to ') || lower.includes('visit ') || lower.includes('in chrome'))
+    ) {
+      const cleanUrl = urlInPrompt[0].replace(/[.,;]+$/, '');
+      const openInChromeWindow = lower.includes('in chrome') || lower.includes('open chrome');
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['browser.navigate'],
+        fastPathMatch: {
+          toolId: 'browser.navigate',
+          args: { url: cleanUrl, openInChromeWindow }
+        }
+      };
+    }
+
+    if (
+      lower.includes('open the official repository') ||
+      lower.includes('open official repository') ||
+      (lower.includes('official') && lower.includes('orion') && lower.includes('summarize'))
+    ) {
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['browser.navigate'],
+        fastPathMatch: {
+          toolId: 'browser.navigate',
+          args: { url: 'https://github.com/iMpacts-AI/ORION' }
+        }
+      };
+    }
+
+    if (
+      lower.startsWith('search ') ||
+      lower.includes('search for ') ||
+      lower.includes('search the web')
+    ) {
+      const searchQuery = prompt
+        .replace(/^search\s+(?:the\s+web\s+)?(?:for\s+)?/i, '')
+        .replace(/\s+and\s+show\s+me\s+the\s+result.*$/i, '')
+        .replace(/[.,;]+$/, '')
+        .trim();
+      return {
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['browser.search'],
+        fastPathMatch: {
+          toolId: 'browser.search',
+          args: { query: searchQuery || prompt }
+        }
+      };
+    }
 
     // Kinetic Computer Use & Desktop OS Automation Intent
     if (
@@ -208,15 +276,64 @@ export abstract class BaseCloudProviderAdapter implements IAIProvider {
       };
     }
 
-    if (lower.includes('cpu') || lower.includes('ram') || lower.includes('memory') || lower.includes('system') || lower.includes('disk') || lower.includes('network') || lower.includes('time')) {
+    if (
+      lower.includes('brightness') ||
+      lower.includes('backlight') ||
+      (lower.includes('screen') && (lower.includes('bright') || lower.includes('dim'))) ||
+      (lower.includes('display') && (lower.includes('bright') || lower.includes('dim')))
+    ) {
+      const pctMatch = lower.match(/(\d{1,3})\s*(?:%|percent)?/);
+      const isMutation =
+        /\b(set|make|change|adjust|turn|put|increase|decrease|raise|lower|up|down|brighter|dimmer|max|full|minimum)\b/i.test(lower) ||
+        (pctMatch !== null && !/\b(is\s+it|check\s+if|whether)\b/i.test(lower));
+      if (isMutation && pctMatch) {
+        return {
+          intent: 'FAST_PATH',
+          confidence: 0.99,
+          suggestedTools: ['system.set_brightness'],
+          fastPathMatch: { toolId: 'system.set_brightness', args: { level: Number(pctMatch[1]) } }
+        };
+      }
+      if (isMutation && /\b(up|increase|raise|brighter|higher)\b/i.test(lower)) {
+        return {
+          intent: 'FAST_PATH',
+          confidence: 0.99,
+          suggestedTools: ['system.control'],
+          fastPathMatch: { toolId: 'system.control', args: { action: 'brightness_up' } }
+        };
+      }
+      if (isMutation && /\b(down|decrease|lower|dimmer|dim)\b/i.test(lower)) {
+        return {
+          intent: 'FAST_PATH',
+          confidence: 0.99,
+          suggestedTools: ['system.control'],
+          fastPathMatch: { toolId: 'system.control', args: { action: 'brightness_down' } }
+        };
+      }
       return {
-        intent: 'SYSTEM_QUERY',
-        confidence: 0.9,
-        suggestedTools: lower.includes('cpu') ? ['system.get_cpu_usage'] : lower.includes('ram') ? ['system.get_memory_usage'] : ['system.get_info']
+        intent: 'FAST_PATH',
+        confidence: 0.99,
+        suggestedTools: ['system.get_brightness'],
+        fastPathMatch: { toolId: 'system.get_brightness', args: {} }
       };
     }
 
-    if (lower.includes('list files') || lower.includes('read file') || lower.includes('directory')) {
+    if (lower.includes('cpu') || lower.includes('ram') || lower.includes('memory') || lower.includes('system') || lower.includes('disk') || lower.includes('network') || lower.includes('time') || lower.includes('spec') || lower.includes('computer') || lower.includes('hardware')) {
+      return {
+        intent: 'SYSTEM_QUERY',
+        confidence: 0.9,
+        suggestedTools:
+          lower.includes('spec') || lower.includes('computer') || lower.includes('hardware')
+            ? ['system.get_info', 'system.get_cpu_usage', 'system.get_memory_usage', 'system.get_disk_usage']
+            : lower.includes('cpu')
+              ? ['system.get_cpu_usage']
+              : lower.includes('ram')
+                ? ['system.get_memory_usage']
+                : ['system.get_info']
+      };
+    }
+
+    if (lower.includes('list files') || lower.includes('read file') || lower.includes('directory') || lower.includes('folder') || lower.includes('files in')) {
       return {
         intent: 'FILE_OPERATION',
         confidence: 0.9,
@@ -251,7 +368,11 @@ export abstract class BaseCloudProviderAdapter implements IAIProvider {
     return { goal: `Process: "${prompt}"`, steps };
   }
 
-  public abstract chat(prompt: string, conversationHistory?: Array<{ role: string; content: string }>): Promise<string>;
+  public abstract chat(
+    prompt: string,
+    conversationHistory?: Array<{ role: string; content: string }>,
+    externalSignal?: AbortSignal
+  ): Promise<string>;
 
   public async stream(
     prompt: string,
@@ -260,7 +381,13 @@ export abstract class BaseCloudProviderAdapter implements IAIProvider {
     timeouts: StreamTimeoutConfig = DEFAULT_STREAM_TIMEOUTS,
     externalSignal?: AbortSignal
   ): Promise<string> {
-    const fullText = await this.chat(prompt, conversationHistory);
+    if (externalSignal?.aborted) {
+      throw new Error('Operation cancelled by AbortSignal.');
+    }
+    const fullText = await this.chat(prompt, conversationHistory, externalSignal);
+    if (externalSignal?.aborted) {
+      throw new Error('Operation cancelled by AbortSignal.');
+    }
     onToken(fullText);
     return fullText;
   }
@@ -300,10 +427,10 @@ export class OpenAICompatibleAdapter extends BaseCloudProviderAdapter {
     const controller = new AbortController();
 
     // Link external cancellation signal if provided
-    const onExternalAbort = () => controller.abort();
+    const onExternalAbort = () => controller.abort(new Error('Aborted by signal'));
     if (externalSignal) {
       if (externalSignal.aborted) {
-        controller.abort();
+        controller.abort(new Error('Aborted by signal'));
       } else {
         externalSignal.addEventListener('abort', onExternalAbort, { once: true });
       }
@@ -362,7 +489,25 @@ export class OpenAICompatibleAdapter extends BaseCloudProviderAdapter {
 
       try {
         while (true) {
-          const { done, value } = await reader.read();
+          if (controller.signal.aborted || externalSignal?.aborted) {
+            const reason = controller.signal.reason || externalSignal?.reason;
+            throw reason instanceof Error ? reason : new Error(String(reason || 'Aborted by signal'));
+          }
+          const { done, value } = await Promise.race([
+            reader.read(),
+            new Promise<never>((_resolve, reject) => {
+              const rejectAbort = () => {
+                const reason = controller.signal.reason || externalSignal?.reason;
+                reject(reason instanceof Error ? reason : new Error(String(reason || 'Aborted by signal')));
+              };
+              if (controller.signal.aborted || externalSignal?.aborted) {
+                rejectAbort();
+                return;
+              }
+              controller.signal.addEventListener('abort', rejectAbort, { once: true });
+              externalSignal?.addEventListener('abort', rejectAbort, { once: true });
+            })
+          ]);
           if (done) break;
 
           const chunkStr = decoder.decode(value, { stream: true });
@@ -407,7 +552,9 @@ export class OpenAICompatibleAdapter extends BaseCloudProviderAdapter {
         }
 
       } finally {
-        reader.releaseLock();
+        try {
+          reader.releaseLock();
+        } catch {}
       }
 
       if (timeoutId) clearTimeout(timeoutId);
@@ -519,13 +666,32 @@ export class OpenAICompatibleAdapter extends BaseCloudProviderAdapter {
     }
   }
 
-  public async chat(prompt: string, conversationHistory?: Array<{ role: string; content: string }>): Promise<string> {
+  public async chat(
+    prompt: string,
+    conversationHistory?: Array<{ role: string; content: string }>,
+    externalSignal?: AbortSignal
+  ): Promise<string> {
+    if (externalSignal?.aborted) {
+      throw new Error('Operation cancelled by AbortSignal.');
+    }
     this.reloadCredentials();
     if (!this.isConfigured || !this.apiKey) {
       throw new Error(`Provider ${this.name} is NOT CONFIGURED. Missing environment key: ${this.config.envKeyName}`);
     }
 
     const start = Date.now();
+    const controller = new AbortController();
+    const onExternalAbort = () => controller.abort(new Error('Operation cancelled by AbortSignal.'));
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort(new Error('Operation cancelled by AbortSignal.'));
+      } else {
+        externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+      }
+    }
+    const timeoutLimitMs = this.id === 'ollama' ? 12000 : 10000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutLimitMs);
+
     try {
       const messages = [
         { role: 'system', content: 'You are ORION — Autonomous AI Command Center Assistant. Be concise, technical, and precise.' },
@@ -537,9 +703,6 @@ export class OpenAICompatibleAdapter extends BaseCloudProviderAdapter {
         ? this.config.baseUrl
         : `${this.config.baseUrl}/chat/completions`;
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12s connection/chat limit
-
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -550,7 +713,7 @@ export class OpenAICompatibleAdapter extends BaseCloudProviderAdapter {
           model: this.config.defaultModel,
           messages,
           temperature: 0.2,
-          max_tokens: 600
+          max_tokens: this.id === 'ollama' ? 320 : 600
         }),
         signal: controller.signal
       });
@@ -566,13 +729,22 @@ export class OpenAICompatibleAdapter extends BaseCloudProviderAdapter {
       }
 
       const json = await response.json();
-      const choice = json.choices?.[0]?.message?.content || 'No response content returned.';
+      const msgObj = json.choices?.[0]?.message;
+      const choice = msgObj?.content || msgObj?.reasoning || msgObj?.reasoning_content || 'No response content returned.';
       this.recordSuccess(Date.now() - start);
       return choice;
 
     } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (externalSignal?.aborted) {
+        throw new Error('Operation cancelled by AbortSignal.');
+      }
       this.recordFailure(err);
       throw err;
+    } finally {
+      if (externalSignal) {
+        externalSignal.removeEventListener('abort', onExternalAbort);
+      }
     }
   }
 }
@@ -930,10 +1102,45 @@ export class OrcaRouterProvider extends OpenAICompatibleAdapter {
 }
 
 // 11. Ollama Local Sovereign AI Provider (Local Inference Hub)
+export interface InstalledOllamaModelInfo {
+  name: string;
+  sizeBytes: number;
+  parameterSize: string;
+  quantizationLevel: string;
+  family: string;
+  contextLength: number;
+  capabilities: string[];
+  supportsTools: boolean;
+  supportsVision: boolean;
+  supportsThinking: boolean;
+}
+
 export class OllamaProvider extends OpenAICompatibleAdapter {
+  private static cachedProbeResult: { reachable: boolean; checkedAt: number } | null = null;
+  private static cachedModels: InstalledOllamaModelInfo[] = [];
+  private static probePromise: Promise<boolean> | null = null;
+  private static readonly PROBE_TTL_MS = 30000;
+
+  private static normalizeOllamaBaseUrl(rawHost?: string): string {
+    let cleaned = (rawHost || 'http://127.0.0.1:11434').trim().replace(/\/+$/, '');
+    if (!cleaned) cleaned = 'http://127.0.0.1:11434';
+    if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+      cleaned = `http://${cleaned}`;
+    }
+    // Convert wildcard daemon bind address 0.0.0.0 to loopback 127.0.0.1 for client requests on Windows
+    cleaned = cleaned.replace(/^(https?:\/\/)0\.0\.0\.0(?=[/:]|$)/i, '$1127.0.0.1');
+    // Ensure default Ollama port 11434 when host has no explicit port
+    if (/^https?:\/\/(?:127\.0\.0\.1|localhost)(?:\/|$)/i.test(cleaned)) {
+      cleaned = cleaned.replace(/^(https?:\/\/(?:127\.0\.0\.1|localhost))(\/.*)?$/i, '$1:11434$2');
+    }
+    return cleaned.endsWith('/v1') ? cleaned : `${cleaned}/v1`;
+  }
+
   constructor() {
     const defaultModel = process.env.OLLAMA_MODEL || 'llama3.1:8b';
-    const baseUrl = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434/v1';
+    const hostEnv = process.env.OLLAMA_BASE_URL || process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
+    const baseUrl = OllamaProvider.normalizeOllamaBaseUrl(hostEnv);
+
     super({
       id: 'ollama',
       displayName: 'Ollama Local Sovereign Engine',
@@ -950,21 +1157,554 @@ export class OllamaProvider extends OpenAICompatibleAdapter {
         taskCategories: ['FAST_CHAT', 'GENERAL_CHAT', 'TOOL_USE', 'CODING', 'PLANNING', 'COMPLEX_REASONING', 'VISION']
       }
     });
-    this.apiKey = process.env.OLLAMA_API_KEY || 'ollama-local';
-    this.isConfigured = true;
-    if (this.status) {
-      this.status.isConfigured = true;
+    this.reloadCredentials();
+    // Kick off nonblocking bounded background probe unless explicitly disabled
+    if (process.env.OLLAMA_ENABLED !== 'false' && process.env.OLLAMA_ENABLED !== '0') {
+      void this.probeHealth(1500);
     }
   }
 
-  public override reloadCredentials(): void {
-    this.apiKey = process.env.OLLAMA_API_KEY || 'ollama-local';
-    this.isConfigured = true;
+  public setModel(modelId: string): void {
+    this.config.defaultModel = modelId;
     if (this.status) {
-      this.status.isConfigured = true;
+      this.status.currentModel = modelId;
+      const meta = OllamaProvider.cachedModels.find(m => m.name === modelId);
+      if (meta) {
+        this.status.capabilities = {
+          ...this.status.capabilities,
+          supportsTools: meta.supportsTools,
+          supportsVision: meta.supportsVision,
+          maxContextTokens: meta.contextLength
+        };
+      }
     }
+  }
+
+  public getActiveModel(): string {
+    return this.config.defaultModel;
+  }
+
+  public getInstalledModels(): InstalledOllamaModelInfo[] {
+    return [...OllamaProvider.cachedModels];
+  }
+
+  public override reloadCredentials(): void {
+    const enabledEnv = (process.env.OLLAMA_ENABLED || '').trim().toLowerCase();
+    if (enabledEnv === 'false' || enabledEnv === '0') {
+      this.apiKey = null;
+      this.isConfigured = false;
+      if (this.status) {
+        this.status.isConfigured = false;
+      }
+      return;
+    }
+
+    const explicitlyConfigured =
+      enabledEnv === 'true' ||
+      enabledEnv === '1' ||
+      Boolean(process.env.OLLAMA_API_KEY) ||
+      Boolean(process.env.OLLAMA_HOST) ||
+      Boolean(process.env.OLLAMA_BASE_URL);
+
+    const cacheReachable =
+      OllamaProvider.cachedProbeResult !== null &&
+      Date.now() - OllamaProvider.cachedProbeResult.checkedAt < OllamaProvider.PROBE_TTL_MS &&
+      OllamaProvider.cachedProbeResult.reachable;
+
+    this.apiKey = process.env.OLLAMA_API_KEY || 'ollama-local';
+    this.isConfigured = explicitlyConfigured || cacheReachable;
+    if (this.status) {
+      this.status.isConfigured = this.isConfigured;
+      if (OllamaProvider.cachedProbeResult && !OllamaProvider.cachedProbeResult.reachable && !explicitlyConfigured) {
+        this.status.isHealthy = false;
+      }
+    }
+  }
+
+  /**
+   * Bounded, nonblocking health check against the local Ollama daemon.
+   * Caches result for PROBE_TTL_MS (30s) so dead endpoints are never probed repeatedly on every request.
+   */
+  public async probeHealth(timeoutMs: number = 350, externalSignal?: AbortSignal): Promise<boolean> {
+    const enabledEnv = (process.env.OLLAMA_ENABLED || '').trim().toLowerCase();
+    if (enabledEnv === 'false' || enabledEnv === '0') {
+      OllamaProvider.cachedProbeResult = { reachable: false, checkedAt: Date.now() };
+      this.reloadCredentials();
+      return false;
+    }
+
+    if (
+      OllamaProvider.cachedProbeResult &&
+      Date.now() - OllamaProvider.cachedProbeResult.checkedAt < OllamaProvider.PROBE_TTL_MS
+    ) {
+      this.reloadCredentials();
+      return OllamaProvider.cachedProbeResult.reachable;
+    }
+
+    if (OllamaProvider.probePromise) {
+      return OllamaProvider.probePromise;
+    }
+
+    OllamaProvider.probePromise = (async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const onAbort = () => controller.abort();
+      if (externalSignal) {
+        if (externalSignal.aborted) controller.abort();
+        else externalSignal.addEventListener('abort', onAbort, { once: true });
+      }
+
+      try {
+        const tagsUrl = this.config.baseUrl.replace(/\/v1\/?$/, '') + '/api/tags';
+        const res = await fetch(tagsUrl, { method: 'GET', signal: controller.signal });
+        clearTimeout(timer);
+        const ok = res.ok;
+        if (ok) {
+          try {
+            const json: any = await res.json();
+            if (Array.isArray(json?.models)) {
+              OllamaProvider.cachedModels = json.models.map((m: any) => {
+                const modelName = String(m.name || m.model || '');
+                const knownProfiles: Record<string, { contextLength: number; capabilities: string[] }> = {
+                  'llama3.1:8b': { contextLength: 131072, capabilities: ['completion', 'tools'] },
+                  'qwen2.5-coder:7b': { contextLength: 32768, capabilities: ['completion', 'tools', 'insert'] },
+                  'deepseek-r1:14b': { contextLength: 131072, capabilities: ['completion', 'tools', 'thinking'] },
+                  'gpt-oss:20b': { contextLength: 131072, capabilities: ['completion', 'tools', 'thinking'] },
+                  'gemma4:26b': { contextLength: 262144, capabilities: ['completion', 'vision', 'tools', 'thinking'] },
+                  'qwen3-coder:30b': { contextLength: 262144, capabilities: ['completion', 'tools'] }
+                };
+                const profile = knownProfiles[modelName];
+                const caps: string[] = Array.isArray(m.capabilities) ? m.capabilities.map(String) : (profile?.capabilities || ['completion', 'tools']);
+                return {
+                  name: String(m.name || m.model || ''),
+                  sizeBytes: Number(m.size || 0),
+                  parameterSize: String(m.details?.parameter_size || ''),
+                  quantizationLevel: String(m.details?.quantization_level || ''),
+                  family: String(m.details?.family || ''),
+                  contextLength: Number(m.details?.context_length || profile?.contextLength || 32768),
+                  capabilities: caps,
+                  supportsTools: caps.includes('tools'),
+                  supportsVision: caps.includes('vision'),
+                  supportsThinking: caps.includes('thinking')
+                };
+              });
+            }
+          } catch {}
+        }
+        OllamaProvider.cachedProbeResult = { reachable: ok, checkedAt: Date.now() };
+        this.isConfigured = ok;
+        if (this.status) {
+          this.status.isConfigured = ok;
+          this.status.isHealthy = ok;
+        }
+        return ok;
+      } catch {
+        clearTimeout(timer);
+        OllamaProvider.cachedProbeResult = { reachable: false, checkedAt: Date.now() };
+        this.isConfigured = false;
+        if (this.status) {
+          this.status.isConfigured = false;
+          this.status.isHealthy = false;
+        }
+        return false;
+      } finally {
+        if (externalSignal) {
+          externalSignal.removeEventListener('abort', onAbort);
+        }
+        OllamaProvider.probePromise = null;
+      }
+    })();
+
+    return OllamaProvider.probePromise;
+  }
+
+  public static resetProbeCache(): void {
+    OllamaProvider.cachedProbeResult = null;
+    OllamaProvider.probePromise = null;
+  }
+
+  /**
+   * Local LLM-assisted structured tool planner fallback when deterministic fast-path does not match.
+   */
+  public override async plan(prompt: string, availableTools: string[]): Promise<AIPlan> {
+    if (LocalHeuristicAIProvider.detectUnsupportedCapability(prompt).unsupported) {
+      return { goal: `Unsupported: "${prompt}"`, steps: [] };
+    }
+    const fastPlan = await super.plan(prompt, availableTools);
+    if (fastPlan.steps.length > 0) {
+      return fastPlan;
+    }
+
+    const lower = prompt.toLowerCase().trim();
+    const looksConversational =
+      /^(hi|hello|hey|who are you|what is orion|explain|summarize|describe|tell me about|thank you|thanks)\b/i.test(lower) ||
+      availableTools.length === 0;
+    if (looksConversational) {
+      return fastPlan;
+    }
+
+    await this.probeHealth(1000);
+    if (!this.isConfigured || !this.status.isHealthy) {
+      return fastPlan;
+    }
+
+    try {
+      const toolGuide = [
+        'system.get_info: {} (hardware/OS specs)',
+        'system.get_cpu_usage: {} (CPU load)',
+        'system.get_memory_usage: {} (RAM usage)',
+        'system.get_disk_usage: {} (disk storage)',
+        'system.get_network_status: {} (IP/network status)',
+        'system.get_current_time: {} (local time/date)',
+        'system.get_brightness: {} (read display brightness %)',
+        'system.set_brightness: {"level": 0..100} (set display brightness %)',
+        'system.volume: {"level": "0..100|up|down|mute|unmute"}',
+        'system.control: {"action": "mute|unmute|show_desktop|task_view|brightness_up|brightness_down|lock"}',
+        'file.list_directory: {"dirPath": "."}',
+        'file.read_text: {"filePath": "<relative_path>"}',
+        'file.write_text: {"filePath": "<relative_path>", "content": "<text>"}',
+        'computer.natural_language_command: {"command": "<open app / desktop action>"}',
+        'info.weather: {"city": "<city>"}',
+        'info.prayers: {"city": "<city>", "country": "UAE"}',
+        'media.status: {}',
+        'media.control: {"action": "play|pause|next|previous|toggle"}',
+        'media.play_spotify: {"query": "<song_or_artist>"}'
+      ].filter(entry => availableTools.includes(entry.split(':')[0].trim()));
+
+      if (toolGuide.length === 0) {
+        return fastPlan;
+      }
+
+      const plannerPrompt =
+        `Select the best tool(s) for the user request from the allowed list below, or return {"steps":[]} if no tool applies or if the request asks for an unsupported capability.\n` +
+        `Allowed tools:\n${toolGuide.map(t => `- ${t}`).join('\n')}\n\n` +
+        `User request: ${JSON.stringify(prompt)}\n` +
+        `Respond ONLY with valid JSON matching: {"steps":[{"toolToCall":"<tool_id>","toolArguments":{}}]}`;
+
+      const raw = await this.chat(plannerPrompt);
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (Array.isArray(parsed?.steps)) {
+          const validSteps = parsed.steps
+            .filter((s: any) => s && typeof s.toolToCall === 'string' && availableTools.includes(s.toolToCall))
+            .slice(0, 4)
+            .map((s: any, idx: number) => ({
+              stepNumber: idx + 1,
+              actionDescription: `Execute ${s.toolToCall}`,
+              toolToCall: s.toolToCall,
+              toolArguments: s.toolArguments && typeof s.toolArguments === 'object' ? s.toolArguments : {}
+            }));
+          if (validSteps.length > 0) {
+            return {
+              goal: `Process: "${prompt}"`,
+              steps: validSteps
+            };
+          }
+        }
+      }
+    } catch {}
+
+    return fastPlan;
+  }
+
+  public override async chat(
+    prompt: string,
+    conversationHistory?: Array<{ role: string; content: string }>,
+    externalSignal?: AbortSignal
+  ): Promise<string> {
+    if (externalSignal?.aborted) {
+      throw new Error('Operation cancelled by AbortSignal.');
+    }
+    const reachable = await this.probeHealth(350);
+    if (!reachable && process.env.OLLAMA_ENABLED !== 'true' && !process.env.OLLAMA_API_KEY) {
+      this.recordFailure(new Error('Ollama local daemon is offline (ECONNREFUSED)'));
+      throw new Error('Ollama local daemon is not reachable on ' + this.config.baseUrl);
+    }
+    return super.chat(prompt, conversationHistory, externalSignal);
   }
 }
 
 
 
+
+export const ALLOWED_PROVIDER_ENV_KEYS = new Set<string>([
+  'OPENROUTER_API_KEY',
+  'OPENROUTER_MODEL',
+  'GROQ_API_KEY',
+  'GROQ_MODEL',
+  'GROQ_CODING_MODEL',
+  'GEMINI_API_KEY',
+  'GITHUB_TOKEN',
+  'CEREBRAS_API_KEY',
+  'MISTRAL_API_KEY',
+  'NVIDIA_API_KEY',
+  'DEEPSEEK_API_KEY',
+  'CLOUDFLARE_API_TOKEN',
+  'CLOUDFLARE_ACCOUNT_ID',
+  'ORCA_API_KEY',
+  'ORCAROUTER_MODEL',
+  'OLLAMA_ENABLED',
+  'OLLAMA_HOST',
+  'OLLAMA_BASE_URL',
+  'OLLAMA_MODEL',
+  'OLLAMA_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_MODEL',
+  'OPENAI_API_KEY',
+  'GLM_API_KEY'
+]);
+
+/**
+ * Validates and persists provider environment keys safely to a .env file.
+ * Rejects unknown keys, non-object payloads, non-string values, or newline injection attempts.
+ * Never logs raw secret values.
+ */
+export function validateAndSaveProviderKeys(
+  keys: unknown,
+  targetEnvPath: string = envPath
+): { success: boolean; savedKeys: string[]; rejectedKeys: string[]; error?: string } {
+  if (!keys || typeof keys !== 'object' || Array.isArray(keys)) {
+    return {
+      success: false,
+      savedKeys: [],
+      rejectedKeys: [],
+      error: 'Invalid payload: keys must be a non-null key-value object.'
+    };
+  }
+
+  const entries = Object.entries(keys as Record<string, unknown>);
+  const savedKeys: string[] = [];
+  const rejectedKeys: string[] = [];
+  const sanitizedUpdates: Record<string, string> = {};
+
+  for (const [rawKey, rawVal] of entries) {
+    const key = String(rawKey).trim();
+    if (!ALLOWED_PROVIDER_ENV_KEYS.has(key)) {
+      rejectedKeys.push(key);
+      continue;
+    }
+    if (typeof rawVal !== 'string') {
+      rejectedKeys.push(key);
+      continue;
+    }
+    // Reject newline or carriage-return characters to prevent .env line injection
+    if (/[\r\n\0]/.test(rawVal)) {
+      rejectedKeys.push(key);
+      continue;
+    }
+    const trimmedVal = rawVal.trim();
+    if (trimmedVal.length > 0 && trimmedVal.length <= 512) {
+      sanitizedUpdates[key] = trimmedVal;
+      savedKeys.push(key);
+    }
+  }
+
+  if (rejectedKeys.length > 0) {
+    return {
+      success: false,
+      savedKeys: [],
+      rejectedKeys,
+      error: `Rejected unauthorized or malformed provider key(s): ${rejectedKeys.join(', ')}`
+    };
+  }
+
+  try {
+    const envContent = fs.existsSync(targetEnvPath) ? fs.readFileSync(targetEnvPath, 'utf-8') : '';
+    const lines = envContent.split(/\r?\n/);
+    const envMap: Record<string, string> = {};
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#')) {
+        const idx = trimmed.indexOf('=');
+        if (idx > 0) {
+          envMap[trimmed.substring(0, idx).trim()] = trimmed.substring(idx + 1);
+        }
+      }
+    }
+
+    for (const [k, v] of Object.entries(sanitizedUpdates)) {
+      process.env[k] = v;
+      envMap[k] = v;
+    }
+
+    const newEnvLines = Object.entries(envMap).map(([k, v]) => `${k}=${v}`);
+    fs.writeFileSync(targetEnvPath, newEnvLines.join('\n'), 'utf-8');
+    return { success: true, savedKeys, rejectedKeys: [] };
+  } catch (err: any) {
+    return {
+      success: false,
+      savedKeys: [],
+      rejectedKeys,
+      error: err?.message || 'Failed to persist provider keys.'
+    };
+  }
+}
+
+// 12. Anthropic Claude Native Provider (Saif / Nur / Hikmah Intelligence Tiers)
+export class AnthropicProvider extends BaseCloudProviderAdapter {
+  constructor() {
+    const defaultModel = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+    super({
+      id: 'anthropic',
+      displayName: 'Anthropic Claude API',
+      envKeyName: 'ANTHROPIC_API_KEY',
+      baseUrl: 'https://api.anthropic.com/v1',
+      defaultModel,
+      visionModel: 'claude-sonnet-4-6',
+      codingModel: 'claude-opus-4-7',
+      capabilities: {
+        supportsTools: true,
+        supportsVision: true,
+        supportsStreaming: true,
+        maxContextTokens: 200000,
+        taskCategories: ['FAST_CHAT', 'GENERAL_CHAT', 'TOOL_USE', 'CODING', 'PLANNING', 'COMPLEX_REASONING', 'VISION', 'SUMMARIZATION', 'STRUCTURED_OUTPUT']
+      }
+    });
+  }
+
+  public setModel(modelId: string): void {
+    this.config.defaultModel = modelId;
+    if (this.status) {
+      this.status.currentModel = modelId;
+    }
+  }
+
+  public async chat(prompt: string, conversationHistory?: Array<{ role: string; content: string }>): Promise<string> {
+    this.reloadCredentials();
+    if (!this.isConfigured || !this.apiKey) {
+      throw new Error(`Provider ${this.name} is NOT CONFIGURED. Missing environment key: ${this.config.envKeyName}`);
+    }
+
+    const start = Date.now();
+    const messages = [
+      ...(conversationHistory || [])
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: prompt }
+    ];
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const response = await fetch(`${this.config.baseUrl}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: this.config.defaultModel,
+          max_tokens: 1024,
+          system: 'You are ORION — Autonomous AI Command Center Assistant by iMpact AI. Be concise, technical, and precise.',
+          messages
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errText = await response.text();
+        this.recordFailure({ status: response.status, message: errText });
+        throw new Error(`[${this.name} API Error ${response.status}] Redacted Error Message`);
+      }
+
+      const data = await response.json();
+      const text = (data.content || [])
+        .filter((b: any) => b.type === 'text')
+        .map((b: any) => b.text)
+        .join('');
+      const latency = Date.now() - start;
+      this.recordSuccess(latency, latency);
+      return text || 'No response content returned from Anthropic.';
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      this.recordFailure(err);
+      throw err;
+    }
+  }
+
+  public async analyzeImage(
+    prompt: string,
+    imageDataUrl: string,
+    conversationHistory?: Array<{ role: string; content: string }>,
+    externalSignal?: AbortSignal
+  ): Promise<string> {
+    this.reloadCredentials();
+    if (!this.isConfigured || !this.apiKey) {
+      throw new Error(`Provider ${this.name} is NOT CONFIGURED.`);
+    }
+
+    const match = imageDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+    if (!match) {
+      throw new Error('Invalid imageDataUrl format for Anthropic vision.');
+    }
+    const mediaType = match[1];
+    const base64Data = match[2];
+
+    const start = Date.now();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    if (externalSignal) {
+      externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+
+    try {
+      const response = await fetch(`${this.config.baseUrl}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: this.config.visionModel || this.config.defaultModel,
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: mediaType,
+                    data: base64Data
+                  }
+                },
+                {
+                  type: 'text',
+                  text: prompt || 'Analyze this screen capture.'
+                }
+              ]
+            }
+          ]
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errText = await response.text();
+        this.recordFailure({ status: response.status, message: errText });
+        throw new Error(`[${this.name} Vision Error ${response.status}]`);
+      }
+
+      const data = await response.json();
+      const text = (data.content || [])
+        .filter((b: any) => b.type === 'text')
+        .map((b: any) => b.text)
+        .join('');
+      const latency = Date.now() - start;
+      this.recordSuccess(latency, latency);
+      return text;
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      this.recordFailure(err);
+      throw err;
+    }
+  }
+}

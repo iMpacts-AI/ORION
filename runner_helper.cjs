@@ -13,22 +13,35 @@ Module._resolveFilename = function(request, parent, isMain, options) {
       try {
         return origResolve.call(this, tsRequest, parent, isMain, options);
       } catch (e) {}
+      const tsxRequest = request.slice(0, -3) + '.tsx';
+      try {
+        return origResolve.call(this, tsxRequest, parent, isMain, options);
+      } catch (e) {}
+    } else if (!path.extname(request) && request.startsWith('.')) {
+      try {
+        return origResolve.call(this, request + '.tsx', parent, isMain, options);
+      } catch (e) {}
     }
     throw err;
   }
 };
 
-require.extensions['.ts'] = function(m, f) {
+function compileTs(m, f) {
   const content = fs.readFileSync(f, 'utf8');
   const compiled = ts.transpileModule(content, {
+    fileName: f,
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
       target: ts.ScriptTarget.ES2022,
+      jsx: ts.JsxEmit.ReactJSX,
       esModuleInterop: true
     }
   });
   return m._compile(compiled.outputText, f);
-};
+}
+
+require.extensions['.ts'] = compileTs;
+require.extensions['.tsx'] = compileTs;
 
 const testFile = process.argv[2];
 if (!testFile) {

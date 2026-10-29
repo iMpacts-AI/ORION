@@ -85,7 +85,7 @@ async function runPhase9WorkflowTests() {
     plan.actions.push({
       id: 'act_titan_crit',
       type: 'WRITE_FILE',
-      payload: { filePath: 'C:\\Users\\smsaq\\Project_Titan\\07_Video_Projects\\5_Render_Exports\\Video_001_Nvidia_CUDA_Moat_Master_4K.mp4' },
+      payload: { filePath: 'C:\\Users\\operator\\Project_Titan\\07_Video_Projects\\5_Render_Exports\\Video_001_Nvidia_CUDA_Moat_Master_4K.mp4' },
       confidence: 0.99,
       riskLevel: 'CRITICAL'
     });
