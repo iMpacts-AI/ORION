@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { InkPrimitives } from './inkLoader';
 
 export type StarParallaxLayer = 'far' | 'mid' | 'near';
@@ -57,8 +57,8 @@ export function generateDeterministicStars(
   maxStars: number = 28,
   seedOffset: number = 0
 ): StarParticle[] {
-  const safeCols = Math.max(12, columns);
-  const safeRows = Math.max(2, Math.min(rows, 28));
+  const safeCols = Math.max(4, columns);
+  const safeRows = Math.max(1, Math.min(rows, 28));
   const count = Math.min(maxStars, Math.max(4, Math.floor((safeCols * safeRows) / 22)));
   const stars: StarParticle[] = [];
 
@@ -97,11 +97,11 @@ export function stepStarfieldParallax(
   rows: number,
   deltaMs: number
 ): StarParticle[] {
-  const safeCols = Math.max(12, columns);
-  const safeRows = Math.max(2, Math.min(28, rows || 5));
+  const safeCols = Math.max(4, columns);
+  const safeRows = Math.max(1, Math.min(28, rows || 5));
   const dtSec = Math.max(0.01, Math.min(deltaMs, 500) / 1000);
 
-  return stars.map(s => {
+  return stars.map((s) => {
     let nextX = (s.x + s.vx * dtSec) % safeCols;
     if (nextX < 0) nextX += safeCols;
 
@@ -128,16 +128,129 @@ export function stepStarfieldParallax(
   });
 }
 
+/**
+ * Pure closed-form starfield projection at `tick`, avoiding cascading child `useEffect` -> `setState`
+ * re-renders when driven by the parent's single coordinated frame scheduler.
+ */
+export function projectStarfieldAtTick(
+  initialStars: StarParticle[],
+  columns: number,
+  rows: number,
+  tick: number,
+  tickDeltaMs: number,
+  vividMode: boolean,
+  seedOffset: number
+): { stars: StarParticle[]; shootingStar: ShootingStar } {
+  const safeCols = Math.max(4, columns);
+  const safeRows = Math.max(1, Math.min(24, rows));
+
+  if (!vividMode || tick <= 0) {
+    const initialShooting: ShootingStar =
+      vividMode && safeRows >= 3 && safeCols >= 24 && seedOffset % 2 === 0
+        ? {
+            active: true,
+            x: Math.min(safeCols - 5, Math.max(8, Math.floor(safeCols * 0.82))),
+            y: Math.min(safeRows - 1, 2),
+            dx: -2,
+            dy: 1,
+            stepsRemaining: 3
+          }
+        : { active: false, x: 0, y: 0, dx: -2, dy: 1, stepsRemaining: 0 };
+    return { stars: initialStars, shootingStar: initialShooting };
+  }
+
+  const clampedDtSec = Math.max(0.016, Math.min(tickDeltaMs || 160, 400) / 1000);
+  const totalSec = tick * clampedDtSec;
+
+  const projectedStars: StarParticle[] = initialStars.map((s) => {
+    let nextX = (s.x + s.vx * totalSec) % safeCols;
+    if (nextX < 0) nextX += safeCols;
+
+    let nextY = (s.y + s.vy * totalSec) % safeRows;
+    if (nextY < 0) nextY += safeRows;
+
+    const nextPhase = (s.twinklePhase + s.twinkleSpeed * totalSec * 3) % 12;
+    const glyphIdx = Math.floor(nextPhase) % STAR_GLYPHS.length;
+    const brightness: StarParticle['brightness'] =
+      nextPhase > 9
+        ? 'bright'
+        : nextPhase < 4 || s.layer === 'far'
+          ? 'dim'
+          : 'normal';
+
+    return {
+      ...s,
+      x: nextX,
+      y: nextY,
+      twinklePhase: nextPhase,
+      glyphIndex: glyphIdx,
+      brightness
+    };
+  });
+
+  let shootingStar: ShootingStar = {
+    active: false,
+    x: 0,
+    y: 0,
+    dx: -2,
+    dy: 1,
+    stepsRemaining: 0
+  };
+
+  if (safeRows >= 2 && safeCols >= 18) {
+    const cycleOffset = tick + seedOffset;
+    const stepInCycle = cycleOffset % 13;
+    if (stepInCycle <= 2) {
+      const launchTick = tick - stepInCycle;
+      if (launchTick >= 0) {
+        const startX =
+          launchTick === 0 && seedOffset % 2 === 0 && safeRows >= 3 && safeCols >= 24
+            ? Math.min(safeCols - 5, Math.max(8, Math.floor(safeCols * 0.82)))
+            : Math.min(
+                safeCols - 4,
+                Math.max(
+                  6,
+                  ((Math.max(1, launchTick) * 11 + seedOffset * 7) % Math.max(8, safeCols - 8)) + 6
+                )
+              );
+        const startY =
+          launchTick === 0 && seedOffset % 2 === 0 && safeRows >= 3
+            ? Math.min(safeRows - 1, 2)
+            : Math.min(safeRows - 1, 1);
+        const curX = startX - 2 * stepInCycle;
+        const curY = startY + stepInCycle;
+        if (curX >= 2 && curX < safeCols - 2 && curY >= 0 && curY < safeRows) {
+          shootingStar = {
+            active: true,
+            x: curX,
+            y: curY,
+            dx: -2,
+            dy: 1,
+            stepsRemaining: 3 - stepInCycle
+          };
+        }
+      }
+    }
+  }
+
+  return { stars: projectedStars, shootingStar };
+}
+
 interface CellDescriptor {
   glyph: string;
   ansiPrefix: string;
 }
 
+/**
+ * IMPORTANT: Every individual CSI escape token below MUST remain <= 19 bytes so
+ * Ink's `@alcalzone/ansi-tokenize` (`string.slice(offset, offset + 19)`) parses
+ * 100% of tokens without slicing trailing digits/`m` into visible grid cells.
+ */
 const ANSI_RESET = '\x1b[0m';
-const ANSI_SHOOTING_HEAD = '\x1b[1;38;2;224;242;254m';
+const ANSI_SHOOTING_HEAD = '\x1b[1m\x1b[38;2;224;242;254m';
 const ANSI_SHOOTING_MID = '\x1b[38;2;56;189;248m';
 const ANSI_SHOOTING_TAIL = '\x1b[38;2;59;130;246m';
-const ANSI_STAR_BRIGHT = '\x1b[1;38;2;241;245;249m';
+const ANSI_STAR_BRIGHT = '\x1b[1m\x1b[38;2;241;245;249m';
 const ANSI_STAR_CYAN = '\x1b[38;2;125;211;252m';
 const ANSI_STAR_VIOLET = '\x1b[38;2;196;181;253m';
 const ANSI_STAR_DIM = '\x1b[38;2;100;116;139m';
@@ -149,107 +262,70 @@ export const Starfield: React.FC<StarfieldProps> = ({
   vividMode,
   noColor = false,
   externalTick,
-  deltaMs = 180,
+  deltaMs = 160,
   seedOffset = 0
 }) => {
   const Box: React.ComponentType<any> = ink?.Box || ('div' as any);
   const Text: React.ComponentType<any> = ink?.Text || ('span' as any);
-  const fieldHeight = Math.max(1, Math.min(24, rows || 3));
-  const fieldWidth = Math.max(12, columns);
 
-  const maxStarsForBand = Math.min(42, Math.max(6, Math.floor((fieldWidth * fieldHeight) / 18)));
+  const fieldHeight = Math.max(0, Math.min(24, rows ?? 0));
+  const fieldWidth = Math.max(0, columns ?? 0);
 
-  const initialStars = useMemo(
-    () => generateDeterministicStars(fieldWidth, fieldHeight, maxStarsForBand, seedOffset),
-    [fieldWidth, fieldHeight, maxStarsForBand, seedOffset]
-  );
-
-  const [stars, setStars] = useState<StarParticle[]>(initialStars);
   const [internalTick, setInternalTick] = useState(0);
-  const [shootingStar, setShootingStar] = useState<ShootingStar>(() =>
-    vividMode && fieldHeight >= 3 && fieldWidth >= 24 && seedOffset % 2 === 0
-      ? {
-          active: true,
-          x: Math.min(fieldWidth - 5, Math.max(8, Math.floor(fieldWidth * 0.82))),
-          y: Math.min(fieldHeight - 1, 2),
-          dx: -2,
-          dy: 1,
-          stepsRemaining: 3
-        }
-      : {
-          active: false,
-          x: 0,
-          y: 0,
-          dx: -2,
-          dy: 1,
-          stepsRemaining: 0
-        }
-  );
 
-  const lastUpdateRef = useRef<number>(Date.now());
-
+  // Fallback internal timer ONLY when rendered standalone without a parent coordinated scheduler
   useEffect(() => {
-    setStars(initialStars);
-  }, [initialStars]);
-
-  useEffect(() => {
-    if (!vividMode) return;
-    if (externalTick !== undefined) {
-      setStars(prev => stepStarfieldParallax(prev, fieldWidth, fieldHeight, deltaMs));
-      setShootingStar(prev => {
-        if (prev.active && prev.stepsRemaining > 0) {
-          const nx = prev.x + prev.dx;
-          const ny = prev.y + prev.dy;
-          if (nx < 2 || nx >= fieldWidth - 2 || ny >= fieldHeight || ny < 0) {
-            return { ...prev, active: false, stepsRemaining: 0 };
-          }
-          return {
-            ...prev,
-            x: nx,
-            y: ny,
-            stepsRemaining: prev.stepsRemaining - 1
-          };
-        }
-        if (fieldHeight >= 2 && fieldWidth >= 18 && externalTick > 0 && (externalTick + seedOffset) % 13 === 0) {
-          const startX = Math.min(
-            fieldWidth - 4,
-            Math.max(6, ((externalTick * 11 + seedOffset * 7) % Math.max(8, fieldWidth - 8)) + 6)
-          );
-          return {
-            active: true,
-            x: startX,
-            y: Math.min(fieldHeight - 1, 1),
-            dx: -2,
-            dy: 1,
-            stepsRemaining: 3
-          };
-        }
-        return prev;
-      });
+    if (!vividMode || externalTick !== undefined || fieldHeight <= 0 || fieldWidth < 4) {
       return;
     }
-
     const timer = setInterval(() => {
-      const now = Date.now();
-      const dt = now - lastUpdateRef.current;
-      lastUpdateRef.current = now;
-      setInternalTick(prev => prev + 1);
-      setStars(prev => stepStarfieldParallax(prev, fieldWidth, fieldHeight, dt));
+      setInternalTick((prev) => prev + 1);
     }, 240);
 
     if (typeof timer.unref === 'function') {
       timer.unref();
     }
     return () => clearInterval(timer);
-  }, [vividMode, externalTick, deltaMs, fieldWidth, fieldHeight, seedOffset]);
+  }, [vividMode, externalTick, fieldHeight, fieldWidth]);
+
+  const safeWidth = Math.max(4, fieldWidth);
+  const safeHeight = Math.max(1, fieldHeight);
+  const maxStarsForBand = Math.min(42, Math.max(4, Math.floor((safeWidth * safeHeight) / 18)));
+
+  const initialStars = useMemo(
+    () => generateDeterministicStars(safeWidth, safeHeight, maxStarsForBand, seedOffset),
+    [safeWidth, safeHeight, maxStarsForBand, seedOffset]
+  );
+
+  const activeTick = externalTick !== undefined ? externalTick : internalTick;
+
+  const { stars, shootingStar } = useMemo(
+    () =>
+      projectStarfieldAtTick(
+        initialStars,
+        safeWidth,
+        safeHeight,
+        activeTick,
+        deltaMs,
+        vividMode,
+        seedOffset
+      ),
+    [initialStars, safeWidth, safeHeight, activeTick, deltaMs, vividMode, seedOffset]
+  );
+
+  if (fieldHeight <= 0 || fieldWidth < 4) {
+    return null;
+  }
 
   if (!vividMode) {
     return (
-      <Box flexDirection="column" width={fieldWidth} marginBottom={0}>
+      <Box flexDirection="column" width={fieldWidth} height={fieldHeight} flexShrink={0}>
         {Array.from({ length: fieldHeight }, (_, idx) => (
           <Text key={idx} dimColor={!noColor}>
             {idx === Math.floor(fieldHeight / 2)
-              ? '     ·       '.repeat(Math.max(2, Math.floor(fieldWidth / 13))).slice(0, fieldWidth)
+              ? '     ·       '
+                  .repeat(Math.max(1, Math.ceil(fieldWidth / 13)))
+                  .slice(0, fieldWidth)
               : ' '.repeat(fieldWidth)}
           </Text>
         ))}
@@ -278,7 +354,6 @@ export const Starfield: React.FC<StarfieldProps> = ({
     }
   }
 
-  // Diagonal shooting star matching the Gemini deep-space reference (`✦` head bottom-left + `╱` cyan trail up-right)
   if (shootingStar.active && shootingStar.stepsRemaining > 0) {
     const hx = shootingStar.x;
     const hy = shootingStar.y;
@@ -290,7 +365,13 @@ export const Starfield: React.FC<StarfieldProps> = ({
     }
     if (hy - 2 >= 0 && hy - 2 < fieldHeight && hx + 2 >= 0 && hx + 2 < fieldWidth) {
       grid[hy - 2][hx + 2] = { glyph: '·', ansiPrefix: ANSI_SHOOTING_TAIL };
-    } else if (hy >= 0 && hy < fieldHeight && hx + 2 >= 0 && hx + 2 < fieldWidth && fieldHeight === 1) {
+    } else if (
+      hy >= 0 &&
+      hy < fieldHeight &&
+      hx + 2 >= 0 &&
+      hx + 2 < fieldWidth &&
+      fieldHeight === 1
+    ) {
       grid[hy][hx + 1] = { glyph: '─', ansiPrefix: ANSI_SHOOTING_MID };
       grid[hy][hx + 2] = { glyph: '·', ansiPrefix: ANSI_SHOOTING_TAIL };
     }
@@ -298,7 +379,7 @@ export const Starfield: React.FC<StarfieldProps> = ({
 
   const renderedRows = grid.map((rowCells) => {
     if (noColor) {
-      return rowCells.map(c => (c ? c.glyph : ' ')).join('');
+      return rowCells.map((c) => (c ? c.glyph : ' ')).join('');
     }
     let out = '';
     for (let c = 0; c < rowCells.length; c++) {
@@ -313,7 +394,7 @@ export const Starfield: React.FC<StarfieldProps> = ({
   });
 
   return (
-    <Box flexDirection="column" width={fieldWidth}>
+    <Box flexDirection="column" width={fieldWidth} height={fieldHeight} flexShrink={0}>
       {renderedRows.map((line, rIdx) => (
         <Text key={rIdx}>{line}</Text>
       ))}

@@ -9,15 +9,15 @@ export interface SlashMenuProps {
   commands: SlashCommandEntry[];
   selectedIndex: number;
   maxVisibleItems?: number;
+  columns?: number;
   noColor?: boolean;
 }
 
 /**
- * Interactive Slash-Command Dropup Menu (`src/tui/SlashMenu.tsx` — Section 3C).
- * - Appears above the prompt input whenever the user types `/`.
- * - Filters commands live as characters are typed.
- * - Supports Up/Down selection, Enter execution, Tab completion, and Escape dismissal.
- * - Displays command name, argument hint, description, and availability status (`IMPLEMENTED`, `CONFIGURED`, `UNAVAILABLE`).
+ * Interactive Slash-Command Dropup Menu (`src/tui/SlashMenu.tsx`).
+ * - Appears cleanly above the prompt capsule whenever the user types `/`.
+ * - Enforces `flexShrink={0}` and strict single-line column budgeting so command descriptions
+ *   NEVER wrap unexpectedly or collide with `<Capsule>` / Oris across terminal widths.
  */
 export const SlashMenu: React.FC<SlashMenuProps> = ({
   ink,
@@ -25,7 +25,8 @@ export const SlashMenu: React.FC<SlashMenuProps> = ({
   query,
   commands,
   selectedIndex,
-  maxVisibleItems = 8,
+  maxVisibleItems = 6,
+  columns = 100,
   noColor = Boolean(process.env.NO_COLOR)
 }) => {
   const { Box, Text } = ink;
@@ -34,32 +35,55 @@ export const SlashMenu: React.FC<SlashMenuProps> = ({
     return null;
   }
 
+  const menuWidth = Math.max(44, columns);
+  const innerCols = Math.max(40, menuWidth - 4);
   const total = commands.length;
+
   if (total === 0) {
+    const emptyMsg = `No matching command for "${query}". Press Esc to dismiss or type /help.`;
     return (
       <Box
         flexDirection="column"
         borderStyle="round"
         borderColor={noColor ? undefined : '#6D5AE6'}
         paddingX={1}
-        marginBottom={1}
+        marginBottom={0}
+        width={menuWidth}
+        flexShrink={0}
       >
-        <Text color={noColor ? undefined : 'yellow'}>
-          No matching command for "{query}". Press Esc to dismiss or type /help.
+        <Text color={noColor ? undefined : 'yellow'} wrap="truncate-end">
+          {emptyMsg.slice(0, innerCols)}
         </Text>
       </Box>
     );
   }
 
+  const safeMaxItems = Math.max(1, maxVisibleItems);
   const clampedIdx = Math.max(0, Math.min(selectedIndex, total - 1));
-  const halfWindow = Math.floor(maxVisibleItems / 2);
+  const halfWindow = Math.floor(safeMaxItems / 2);
   let startIdx = Math.max(0, clampedIdx - halfWindow);
-  const endIdx = Math.min(total, startIdx + maxVisibleItems);
-  if (endIdx - startIdx < maxVisibleItems) {
-    startIdx = Math.max(0, endIdx - maxVisibleItems);
+  const endIdx = Math.min(total, startIdx + safeMaxItems);
+  if (endIdx - startIdx < safeMaxItems) {
+    startIdx = Math.max(0, endIdx - safeMaxItems);
   }
 
   const visibleSlice = commands.slice(startIdx, endIdx);
+  const showFullBadges = innerCols >= 76;
+  const hintColWidth = innerCols >= 98 ? 20 : innerCols >= 82 ? 14 : 0;
+  const cmdColWidth = innerCols >= 68 ? 18 : 15;
+  const badgeColWidth = showFullBadges ? 14 : 7;
+  const descMaxWidth = Math.max(
+    8,
+    innerCols - (cmdColWidth + 2) - hintColWidth - badgeColWidth - 1
+  );
+
+  const headerTitle = `✦ ORION Slash Commands (${total} matched)`;
+  const headerKeys =
+    innerCols >= 84
+      ? '↑/↓ Navigate • Tab Complete • Enter Run • Esc Dismiss'
+      : innerCols >= 64
+        ? '↑/↓ Move • Tab • Enter • Esc'
+        : '↑/↓ • Enter • Esc';
 
   return (
     <Box
@@ -68,14 +92,15 @@ export const SlashMenu: React.FC<SlashMenuProps> = ({
       borderColor={noColor ? undefined : '#8A70FF'}
       paddingX={1}
       marginBottom={0}
-      width="100%"
+      width={menuWidth}
+      flexShrink={0}
     >
-      <Box justifyContent="space-between" marginBottom={0}>
-        <Text bold color={noColor ? undefined : '#B39DFF'}>
-          ✦ ORION Slash Commands ({total} matched)
+      <Box justifyContent="space-between" width="100%" marginBottom={0}>
+        <Text bold color={noColor ? undefined : '#B39DFF'} wrap="truncate-end">
+          {headerTitle}
         </Text>
-        <Text dimColor>
-          ↑/↓ Navigate • Tab Complete • Enter Run • Esc Dismiss
+        <Text dimColor wrap="truncate-end">
+          {headerKeys}
         </Text>
       </Box>
 
@@ -89,33 +114,40 @@ export const SlashMenu: React.FC<SlashMenuProps> = ({
               ? 'cyan'
               : 'yellow';
 
+        const badgeLabel = showFullBadges
+          ? `[${entry.availability}]`
+          : `[${entry.availability.slice(0, 4)}]`;
+
+        const hintText =
+          hintColWidth > 0
+            ? (entry.argumentHint || '').slice(0, hintColWidth - 1).padEnd(hintColWidth)
+            : '';
+
+        const descText = entry.description.slice(0, descMaxWidth);
+
         return (
           <Box key={entry.command} justifyContent="space-between" width="100%">
-            <Box>
+            <Box flexShrink={1}>
               <Text
                 bold={isSelected}
                 color={noColor ? undefined : isSelected ? '#00E5FF' : '#E2E8F0'}
               >
-                {isSelected ? '❯ ' : '  '}
-                {entry.command.padEnd(18)}
+                {`${isSelected ? '❯ ' : '  '}${entry.command.slice(0, cmdColWidth).padEnd(cmdColWidth)}`}
               </Text>
-              {entry.argumentHint ? (
-                <Text color={noColor ? undefined : '#94A3B8'}>
-                  {entry.argumentHint.slice(0, 22).padEnd(23)}
-                </Text>
-              ) : (
-                <Text>{''.padEnd(23)}</Text>
-              )}
+              {hintColWidth > 0 ? (
+                <Text color={noColor ? undefined : '#94A3B8'}>{hintText}</Text>
+              ) : null}
               <Text
                 color={noColor ? undefined : isSelected ? '#FFFFFF' : '#94A3B8'}
                 dimColor={!isSelected}
+                wrap="truncate-end"
               >
-                {entry.description.slice(0, 58)}
+                {descText}
               </Text>
             </Box>
-            <Box>
+            <Box flexShrink={0}>
               <Text color={noColor ? undefined : badgeColor} dimColor={!isSelected}>
-                [{entry.availability}]
+                {badgeLabel}
               </Text>
             </Box>
           </Box>

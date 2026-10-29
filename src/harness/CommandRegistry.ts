@@ -103,13 +103,35 @@ export class CommandRegistry {
     const all = this.getAllCommands();
     if (!clean || clean === '/') return all;
     const withoutSlash = clean.replace(/^\/+/, '');
-    return all.filter(
-      c =>
-        c.command.slice(1).includes(withoutSlash) ||
-        c.aliases.some(a => a.toLowerCase().includes(withoutSlash)) ||
+    const withSlash = `/${withoutSlash}`;
+
+    const scoreEntry = (c: SlashCommandEntry): number => {
+      const cmdLower = c.command.toLowerCase();
+      const bareCmd = cmdLower.slice(1);
+      const aliasLowers = c.aliases.map((a) => a.toLowerCase());
+      if (cmdLower === withSlash || aliasLowers.includes(withSlash) || aliasLowers.includes(withoutSlash)) {
+        return 0; // Exact command or alias match
+      }
+      if (bareCmd.startsWith(withoutSlash) || aliasLowers.some((a) => a.replace(/^\/+/, '').startsWith(withoutSlash))) {
+        return 1; // Command or alias prefix match
+      }
+      if (bareCmd.includes(withoutSlash) || aliasLowers.some((a) => a.includes(withoutSlash))) {
+        return 2; // Command or alias substring match
+      }
+      if (
         c.description.toLowerCase().includes(withoutSlash) ||
         c.category.toLowerCase().includes(withoutSlash)
-    );
+      ) {
+        return 3; // Description or category match
+      }
+      return -1;
+    };
+
+    return all
+      .map((entry, idx) => ({ entry, idx, rank: scoreEntry(entry) }))
+      .filter((item) => item.rank >= 0)
+      .sort((a, b) => (a.rank !== b.rank ? a.rank - b.rank : a.idx - b.idx))
+      .map((item) => item.entry);
   }
 
   private registerAllCommands(): void {

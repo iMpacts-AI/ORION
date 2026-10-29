@@ -538,19 +538,27 @@ function hexToRgb(hex: string): [number, number, number] {
   return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
 }
 
+function isLuminousOrisFeature(hex: string | null): boolean {
+  if (!hex) return false;
+  const [r, g, b] = hexToRgb(hex);
+  return Math.max(r, g, b) >= 110;
+}
+
 /**
  * Renders the canonical 18x18 Gemini pixel-art Oris sprite into 9 rows of 24-bit ANSI
- * half-block characters (`▀`), applying faithful pixel-level eye animations (blink, tracking,
- * thinking, working, awaiting_approval, success, cancelled, error) and tumble-flip on rapid clicks.
+ * half-block characters (`▀` / `▄` / `█` / ` `) with genuine terminal background transparency (`\x1b[49m`),
+ * fixed 20-column cell width, <=19-byte CSI SGR tokens (safe for Ink's `@alcalzone/ansi-tokenize`),
+ * and faithful pixel-level eye animations across all 13 `OrisActionState`s.
  */
 export function renderOrisPixelHalfBlockLines(
   state: OrisMascotState,
-  options?: { cardBgHex?: string; noColor?: boolean }
+  options?: { cardBgHex?: string; opaqueBg?: boolean; noColor?: boolean }
 ): string[] {
   const baseGrid = loadCanonicalOrisPixelGrid();
-  const grid: Array<Array<string | null>> = baseGrid.map(r => [...r]);
+  const grid: Array<Array<string | null>> = baseGrid.map((r) => [...r]);
   const darkFaceHex = '#011948';
-  const cardBg = options?.cardBgHex || '#070d19';
+  const useOpaqueBg = Boolean(options?.opaqueBg && options?.cardBgHex);
+  const opaqueBgHex = options?.cardBgHex || '#070d19';
   const noColor = Boolean(options?.noColor);
 
   // Clear canonical eye columns (rows 6..9, cols 8 and 13) before drawing animated eyes
@@ -623,8 +631,13 @@ export function renderOrisPixelHalfBlockLines(
   const shiftPrefix = state.tiltDirection < 0 ? '' : state.tiltDirection > 0 ? '  ' : ' ';
   const shiftSuffix = state.tiltDirection < 0 ? '  ' : state.tiltDirection > 0 ? '' : ' ';
 
-  const [bgR, bgG, bgB] = hexToRgb(cardBg);
-  const bgAnsi = `\x1b[48;2;${bgR};${bgG};${bgB}m`;
+  const defaultBgReset = useOpaqueBg
+    ? (() => {
+        const [bgR, bgG, bgB] = hexToRgb(opaqueBgHex);
+        return `\x1b[48;2;${bgR};${bgG};${bgB}m`;
+      })()
+    : '\x1b[49m';
+
   const lines: string[] = [];
 
   for (let rowPair = 0; rowPair < 9; rowPair++) {
@@ -634,23 +647,37 @@ export function renderOrisPixelHalfBlockLines(
     if (noColor) {
       let mono = shiftPrefix;
       for (let c = 0; c < 18; c++) {
-        const t = topRow[c] !== null && topRow[c] !== darkFaceHex;
-        const b = botRow[c] !== null && botRow[c] !== darkFaceHex;
+        const t = isLuminousOrisFeature(topRow[c]);
+        const b = isLuminousOrisFeature(botRow[c]);
         mono += t && b ? '█' : t ? '▀' : b ? '▄' : ' ';
       }
       lines.push(mono + shiftSuffix);
       continue;
     }
 
-    let ansiLine = `${bgAnsi}${shiftPrefix}`;
+    let ansiLine = `${defaultBgReset}${shiftPrefix}`;
     for (let c = 0; c < 18; c++) {
-      const topHex = topRow[c] || cardBg;
-      const botHex = botRow[c] || cardBg;
-      const [tr, tg, tb] = hexToRgb(topHex);
-      const [br, bg, bb] = hexToRgb(botHex);
-      ansiLine += `\x1b[38;2;${tr};${tg};${tb}m\x1b[48;2;${br};${bg};${bb}m▀`;
+      const topHex = topRow[c] || (useOpaqueBg ? opaqueBgHex : null);
+      const botHex = botRow[c] || (useOpaqueBg ? opaqueBgHex : null);
+
+      if (topHex === null && botHex === null) {
+        ansiLine += `${defaultBgReset} `;
+      } else if (topHex !== null && botHex === null) {
+        const [tr, tg, tb] = hexToRgb(topHex);
+        ansiLine += `\x1b[38;2;${tr};${tg};${tb}m${defaultBgReset}▀`;
+      } else if (topHex === null && botHex !== null) {
+        const [br, bg, bb] = hexToRgb(botHex);
+        ansiLine += `\x1b[38;2;${br};${bg};${bb}m${defaultBgReset}▄`;
+      } else if (topHex === botHex) {
+        const [tr, tg, tb] = hexToRgb(topHex!);
+        ansiLine += `\x1b[38;2;${tr};${tg};${tb}m${defaultBgReset}█`;
+      } else {
+        const [tr, tg, tb] = hexToRgb(topHex!);
+        const [br, bg, bb] = hexToRgb(botHex!);
+        ansiLine += `\x1b[38;2;${tr};${tg};${tb}m\x1b[48;2;${br};${bg};${bb}m▀`;
+      }
     }
-    ansiLine += `${bgAnsi}${shiftSuffix}\x1b[0m`;
+    ansiLine += `${defaultBgReset}${shiftSuffix}\x1b[0m`;
     lines.push(ansiLine);
   }
 
@@ -796,6 +823,8 @@ export function renderOrisAsciiLines(state: OrisMascotState): {
   return { lines, color, badgeText };
 }
 
+export const ORIS_MASCOT_STAGE_ROWS = 11;
+
 export interface MascotInteractiveProps {
   ink?: InkPrimitives;
   columns: number;
@@ -808,6 +837,8 @@ export interface MascotInteractiveProps {
   externalTick?: number;
   deltaMs?: number;
   cardBgHex?: string;
+  opaqueBg?: boolean;
+  parentDriven?: boolean;
 }
 
 export const MascotInteractive: React.FC<MascotInteractiveProps> = ({
@@ -820,62 +851,89 @@ export const MascotInteractive: React.FC<MascotInteractiveProps> = ({
   controllerRef,
   externalTick = 0,
   deltaMs = 80,
-  cardBgHex = '#070d19'
+  cardBgHex = '#070d19',
+  opaqueBg = false,
+  parentDriven = false
 }) => {
   const Box: React.ComponentType<any> = ink?.Box || ('div' as any);
   const Text: React.ComponentType<any> = ink?.Text || ('span' as any);
-  const internalControllerRef = useRef<OrisMascotController>(new OrisMascotController());
-  const controller = internalControllerRef.current;
+  const fallbackControllerRef = useRef<OrisMascotController | null>(null);
+  if (!fallbackControllerRef.current) {
+    fallbackControllerRef.current = new OrisMascotController();
+  }
 
-  if (controllerRef) {
+  const controller =
+    controllerRef?.current ?? fallbackControllerRef.current;
+
+  if (controllerRef && !controllerRef.current) {
     controllerRef.current = controller;
   }
 
-  const [mascotState, setMascotState] = useState<OrisMascotState>(() => controller.getState());
+  const lastLifecycleRef = useRef<{
+    lifecycle: OrisTaskLifecycleState;
+    caption?: string;
+  } | null>(null);
 
-  useEffect(() => {
-    const updated = controller.setTaskLifecycleState(taskLifecycle, statusCaption);
-    setMascotState(updated);
-  }, [controller, taskLifecycle, statusCaption]);
+  if (
+    !lastLifecycleRef.current ||
+    lastLifecycleRef.current.lifecycle !== taskLifecycle ||
+    lastLifecycleRef.current.caption !== statusCaption
+  ) {
+    lastLifecycleRef.current = { lifecycle: taskLifecycle, caption: statusCaption };
+    controller.setTaskLifecycleState(taskLifecycle, statusCaption);
+  }
 
-  useEffect(() => {
-    if (!vividMode && taskLifecycle === 'idle') return;
-    const stepped = controller.step(deltaMs);
-    setMascotState(stepped);
-  }, [controller, externalTick, deltaMs, vividMode, taskLifecycle]);
+  const lastSteppedTickRef = useRef<number>(externalTick);
+  if (!parentDriven && lastSteppedTickRef.current !== externalTick) {
+    lastSteppedTickRef.current = externalTick;
+    if (vividMode || taskLifecycle !== 'idle') {
+      controller.step(deltaMs);
+    }
+  }
 
+  const mascotState = controller.getState();
   const { color, badgeText } = renderOrisAsciiLines(mascotState);
-  const pixelLines = renderOrisPixelHalfBlockLines(mascotState, { cardBgHex, noColor });
+  const pixelLines = renderOrisPixelHalfBlockLines(mascotState, {
+    cardBgHex,
+    opaqueBg,
+    noColor
+  });
   const isJumpingUp = mascotState.y < 0;
 
   const particleBanner =
     vividMode && mascotState.particles.length > 0
-      ? mascotState.particles.map(p => p.glyph).join('   ')
+      ? mascotState.particles.map((p) => p.glyph).join('   ')
       : '';
 
-  const activeCaption = mascotState.statusCaption || (mascotState.actionState !== 'idle' && mascotState.actionState !== 'blinking' ? badgeText : '');
+  const stageWidth = Math.min(Math.max(22, columns - 4), 72);
+  const rawCaption =
+    mascotState.statusCaption ||
+    (mascotState.actionState !== 'idle' && mascotState.actionState !== 'blinking'
+      ? badgeText
+      : '');
+  const activeCaption = rawCaption ? rawCaption.slice(0, Math.max(12, stageWidth - 2)) : '';
 
   return (
     <Box
       flexDirection="column"
       alignItems="center"
-      justifyContent="center"
-      width={Math.min(Math.max(24, columns - 8), 72)}
+      justifyContent="flex-start"
+      width={stageWidth}
+      height={ORIS_MASCOT_STAGE_ROWS}
+      flexShrink={0}
     >
-      {particleBanner ? (
-        <Text color={noColor ? undefined : '#a78bfa'}>{particleBanner}</Text>
-      ) : !isJumpingUp ? (
-        <Text> </Text>
+      {!isJumpingUp ? (
+        <Text color={noColor ? undefined : '#a78bfa'}>{particleBanner || ' '}</Text>
       ) : null}
       {pixelLines.map((line, idx) => (
         <Text key={`oris_px_${idx}`}>{line}</Text>
       ))}
-      {isJumpingUp ? <Text> </Text> : null}
-      {activeCaption ? (
-        <Text color={noColor ? undefined : color} dimColor>
-          {activeCaption}
-        </Text>
+      {isJumpingUp ? (
+        <Text color={noColor ? undefined : '#a78bfa'}>{particleBanner || ' '}</Text>
       ) : null}
+      <Text color={noColor ? undefined : color} dimColor wrap="truncate-end">
+        {activeCaption || ' '}
+      </Text>
     </Box>
   );
 };
