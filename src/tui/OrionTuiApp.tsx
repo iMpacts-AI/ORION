@@ -21,8 +21,24 @@ import {
 } from './MascotInteractive';
 import {
   CoordinatedFrameStream,
+  FOCUS_TRACKING_DISABLE_SEQ,
+  FOCUS_TRACKING_ENABLE_SEQ,
   FilteredTtyInputStream
 } from './CoordinatedFrameWriter';
+import {
+  isDecorativeMotionActive
+} from './VisualPreferences';
+import {
+  OrionTipDefinition,
+  TIP_ROTATION_INTERVAL_MS,
+  parseTipSegments
+} from './OrionTipsEngine';
+import {
+  formatLogicalPath,
+  resolvePublicEngineIdentity,
+  sanitizeConversationalResponse,
+  sanitizePersonalPathsInText
+} from '../shared/branding/OrionEngineIdentity';
 import { OrionCliKernel } from '../cli/OrionCliKernel';
 import { OrionCliCommandRouter } from '../cli/OrionCliCommandRouter';
 import { ProcessSupervisor } from '../main/services/computer/ProcessSupervisor';
@@ -212,6 +228,9 @@ function didMascotVisualStateChange(prev: OrisMascotState, next: OrisMascotState
     prev.eyeOffsetX !== next.eyeOffsetX ||
     prev.tiltDirection !== next.tiltDirection ||
     prev.blinkLong !== next.blinkLong ||
+    prev.breathingPhase !== next.breathingPhase ||
+    prev.isDancing !== next.isDancing ||
+    prev.clickStage !== next.clickStage ||
     prev.statusCaption !== next.statusCaption ||
     prev.particles.length !== next.particles.length
   );
@@ -224,12 +243,14 @@ export interface OrionTuiViewProps {
   onRequestExit: (code: number) => void;
   noColor?: boolean;
   registerMouseHandler?: (handler: ((events: SgrMouseEvent[]) => void) | undefined) => void;
+  registerFocusHandler?: (handler: ((focused: boolean) => void) | undefined) => void;
 }
 
 /**
  * Full-Screen Alternate-Buffer Terminal State Guard.
  * Ensures `\x1b[?1049h` (enter alternate screen), OSC 11 deep-space background (`#070d19`),
- * SGR mouse tracking, and `\x1b[?1049l\x1b[?25h` restoration are always balanced on exit.
+ * SGR mouse tracking, DEC `?1004` terminal focus tracking, and `\x1b[?1049l\x1b[?25h` restoration
+ * are always balanced on exit.
  */
 export class AlternateScreenGuard {
   private active = false;
@@ -244,7 +265,9 @@ export class AlternateScreenGuard {
     this.active = true;
     try {
       const oscBg = process.env.NO_COLOR ? '' : '\x1b]11;#070d19\x07';
-      this.stdout.write(`\x1b[?1049h${oscBg}\x1b[2J\x1b[H${SGR_MOUSE_ENABLE_SEQ}`);
+      this.stdout.write(
+        `\x1b[?1049h${oscBg}\x1b[2J\x1b[H${SGR_MOUSE_ENABLE_SEQ}${FOCUS_TRACKING_ENABLE_SEQ}`
+      );
     } catch {}
   }
 
@@ -254,7 +277,7 @@ export class AlternateScreenGuard {
     try {
       const oscRestore = process.env.NO_COLOR ? '' : '\x1b]111\x07';
       this.stdout.write(
-        `\x1b[?2026l${SGR_MOUSE_DISABLE_SEQ}${oscRestore}\x1b[0m\x1b[?25h\x1b[?1049l`
+        `\x1b[?2026l${FOCUS_TRACKING_DISABLE_SEQ}${SGR_MOUSE_DISABLE_SEQ}${oscRestore}\x1b[0m\x1b[?25h\x1b[?1049l`
       );
     } catch {}
   }
@@ -273,7 +296,8 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
   router,
   onRequestExit,
   noColor = Boolean(process.env.NO_COLOR),
-  registerMouseHandler
+  registerMouseHandler,
+  registerFocusHandler
 }) => {
   const { Box, Text, useInput, useStdout, useStdin } = ink;
   const { stdout } = useStdout();
@@ -315,6 +339,13 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
   const [slashDismissed, setSlashDismissed] = useState(false);
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
   const [vividMode, setVividMode] = useState<boolean>(kernel.commandRegistry.isVividMode());
+  const [animationsEnabled, setAnimationsEnabled] = useState<boolean>(
+    kernel.commandRegistry.isAnimationsEnabled()
+  );
+  const [isTerminalFocused, setIsTerminalFocused] = useState<boolean>(true);
+  const [activeTip, setActiveTip] = useState<OrionTipDefinition>(() =>
+    kernel.commandRegistry.getCurrentTip()
+  );
   const [uiMode, setUiMode] = useState<HarnessMode>(kernel.harness.getMode());
   const [uiEffort, setUiEffort] = useState<HarnessEffortLevel>(kernel.harness.getEffort());
   const [isBusy, setIsBusy] = useState(false);
@@ -325,7 +356,7 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
   // Single coordinated frame clock (drives both Starfield projection and Oris Mascot controller in 1 render)
   const [frameClock, setFrameClock] = useState<{ tick: number; deltaMs: number }>({
     tick: 0,
-    deltaMs: 160
+    deltaMs: 240
   });
 
   const mascotControllerRef = useRef<OrisMascotController | null>(null);
@@ -409,37 +440,117 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
     ]
   );
 
-  // Single coordinated delta-time animation scheduler: steps Oris synchronously before scheduling 1 React commit
+  const motionActive = isDecorativeMotionActive(
+    {
+      visualMode: vividMode ? 'vivid' : 'minimal',
+      animationsEnabled
+    },
+    isTerminalFocused
+  );
+
+  const [tipIntervalMs, setTipIntervalMs] = useState<number>(
+    () =>
+      (kernel.visualPreferences || kernel.commandRegistry.visualPreferences)?.getPreferences()
+        .tipRotationIntervalMs || TIP_ROTATION_INTERVAL_MS
+  );
+
+  // Sync visual preferences store updates from any command or config surface
   useEffect(() => {
-    if (!vividMode && !isBusy) return;
-    let lastTime = Date.now();
-    const intervalMs = isBusy ? 100 : 160;
+    const store = kernel.visualPreferences || kernel.commandRegistry.visualPreferences;
+    if (!store) return;
+    const unsub = store.subscribe((prefs) => {
+      setVividMode(prefs.visualMode === 'vivid');
+      setAnimationsEnabled(prefs.animationsEnabled);
+      setTipIntervalMs(prefs.tipRotationIntervalMs || TIP_ROTATION_INTERVAL_MS);
+    });
+    return unsub;
+  }, [kernel]);
+
+  // Register terminal focus-in / focus-out listener so decorative timers pause immediately when unfocused
+  useEffect(() => {
+    if (!registerFocusHandler) return;
+    registerFocusHandler((focused: boolean) => {
+      setIsTerminalFocused(focused);
+    });
+    return () => {
+      registerFocusHandler(undefined);
+    };
+  }, [registerFocusHandler]);
+
+  // Automatic Home-Screen Tip Rotation (~10s weighted rotation, paused on blur, cleaned up when leaving Home or unmounting)
+  useEffect(() => {
+    if (!layout.showFooterTip || hasActivityFeed || !isTerminalFocused) {
+      return;
+    }
     const timer = setInterval(() => {
-      const now = Date.now();
-      const dt = Math.max(16, Math.min(now - lastTime, 400));
+      setActiveTip(kernel.commandRegistry.cycleTip('weighted'));
+    }, tipIntervalMs);
+
+    if (typeof timer.unref === 'function') {
+      timer.unref();
+    }
+    return () => clearInterval(timer);
+  }, [hasActivityFeed, isTerminalFocused, kernel.commandRegistry, layout.showFooterTip, tipIntervalMs]);
+
+  // Single coordinated delta-time animation scheduler:
+  // - Zero decorative timers run when `!animationsEnabled` or `!isTerminalFocused` or (`!vividMode && !isBusy`).
+  // - Uses high-resolution `performance.now()` delta-time and skips redundant React commits in Minimal mode.
+  useEffect(() => {
+    const shouldRunScheduler =
+      isTerminalFocused && animationsEnabled && (vividMode || isBusy);
+    if (!shouldRunScheduler) {
+      return;
+    }
+
+    let lastTime = performance.now();
+    const intervalMs = isBusy ? 110 : 240;
+    const timer = setInterval(() => {
+      const now = performance.now();
+      const dt = Math.max(16, Math.min(Math.round(now - lastTime), 450));
       lastTime = now;
 
       const ctrl = mascotControllerRef.current;
+      let mascotChanged = false;
       if (ctrl) {
-        ctrl.step(dt);
+        const beforeState = ctrl.getState();
+        const afterState = ctrl.step(dt);
+        mascotChanged = didMascotVisualStateChange(beforeState, afterState);
       }
 
-      setFrameClock((prev) => ({
-        tick: prev.tick + 1,
-        deltaMs: dt
-      }));
+      if (vividMode || mascotChanged) {
+        setFrameClock((prev) => ({
+          tick: prev.tick + 1,
+          deltaMs: dt
+        }));
+      }
     }, intervalMs);
 
     if (typeof timer.unref === 'function') {
       timer.unref();
     }
     return () => clearInterval(timer);
-  }, [vividMode, isBusy]);
+  }, [animationsEnabled, isBusy, isTerminalFocused, vividMode]);
 
   // Coordinated SGR mouse handler (invoked by FilteredTtyInputStream without competing with Ink's stdin reader)
   const routeSgrMouseEvents = useCallback(
     (mouseEvents: SgrMouseEvent[]) => {
-      if (layout.compactHeader || mouseEvents.length === 0) return;
+      if (mouseEvents.length === 0) return;
+
+      // Deliberate click on the footer tip row cycles to the next useful tip without altering prompt focus
+      if (layout.showFooterTip) {
+        for (const ev of mouseEvents) {
+          if (
+            ev.type === 'press' &&
+            ev.isLeftButton &&
+            ev.row >= layout.viewportRows
+          ) {
+            setActiveTip(kernel.commandRegistry.cycleTip('next'));
+            return;
+          }
+        }
+      }
+
+      if (layout.compactHeader) return;
       const ctrl = mascotControllerRef.current;
       if (!ctrl) return;
 
@@ -473,9 +584,12 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
       dims.rows,
       filteredSlashCommands.length,
       isSlashMenuVisible,
+      kernel.commandRegistry,
       layout.compactHeader,
+      layout.showFooterTip,
       layout.slashMaxVisibleItems,
-      layout.topStarRows
+      layout.topStarRows,
+      layout.viewportRows
     ]
   );
 
@@ -530,13 +644,19 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
         partialWriteBuffer = '';
       }
       if (lineCollector.length === 0) return;
-      const joined = lineCollector.join('\n').trim();
+      const filteredLines = lineCollector
+        .map((line) => kernel.renderer.stripAnsi(line))
+        .filter((plain) => !/^\s*╭─\s*ORION Task\s*\[task_\d+\]/i.test(plain));
       lineCollector = [];
+      const joined = sanitizePersonalPathsInText(
+        filteredLines.join('\n').trim(),
+        kernel.projectRoot
+      );
       if (joined) {
         appendFeed({
           role: 'system',
-          title: 'ORION Telemetry',
-          body: kernel.renderer.stripAnsi(joined),
+          title: 'ORION Activity',
+          body: joined,
           statusBadge: 'OUTPUT'
         });
       }
@@ -580,7 +700,7 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
 
     kernel.renderer.startStream = (providerId: string, modelName: string) => {
       isCapturingStream = true;
-      activeStreamLabel = `${providerId}:${modelName}`;
+      activeStreamLabel = resolvePublicEngineIdentity(providerId, modelName).publicLabel;
       activeStreamText = '';
     };
 
@@ -593,12 +713,18 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
     kernel.renderer.endStream = (latencyMs?: number) => {
       if (isCapturingStream) {
         isCapturingStream = false;
-        const finalBody = kernel.renderer.stripAnsi(activeStreamText).trim();
+        const finalBody = sanitizeConversationalResponse(
+          kernel.renderer.stripAnsi(activeStreamText).trim(),
+          {
+            workspaceRoot: kernel.projectRoot,
+            redactProviderIds: true
+          }
+        );
         activeStreamText = '';
         if (finalBody) {
           appendFeed({
             role: 'assistant',
-            title: `ORION [${activeStreamLabel || 'router'}]${
+            title: `ORION [${activeStreamLabel || 'ORION Engine'}]${
               latencyMs !== undefined ? ` (${latencyMs}ms)` : ''
             }`,
             body: finalBody,
@@ -612,7 +738,7 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
       appendFeed({
         role: 'system',
         title: 'Info',
-        body: kernel.renderer.stripAnsi(msg),
+        body: sanitizePersonalPathsInText(kernel.renderer.stripAnsi(msg), kernel.projectRoot),
         statusBadge: 'INFO'
       });
     };
@@ -621,7 +747,7 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
       appendFeed({
         role: 'error',
         title: 'Warning',
-        body: kernel.renderer.stripAnsi(msg),
+        body: sanitizePersonalPathsInText(kernel.renderer.stripAnsi(msg), kernel.projectRoot),
         statusBadge: 'WARN'
       });
     };
@@ -630,7 +756,7 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
       appendFeed({
         role: 'error',
         title: 'Error',
-        body: kernel.renderer.stripAnsi(msg),
+        body: sanitizePersonalPathsInText(kernel.renderer.stripAnsi(msg), kernel.projectRoot),
         statusBadge: 'ERROR'
       });
     };
@@ -640,10 +766,22 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
       latencyMs: number,
       providerLabel?: string
     ) => {
+      let cleanBadge = providerLabel || 'ORION Engine';
+      if (cleanBadge.includes(':') || cleanBadge.includes('/')) {
+        const [pId, ...rest] = cleanBadge.split(/[:/]/);
+        cleanBadge = resolvePublicEngineIdentity(pId, rest.join(':')).publicLabel;
+      }
+      const cleanBody = sanitizeConversationalResponse(
+        kernel.renderer.stripAnsi(response),
+        {
+          workspaceRoot: kernel.projectRoot,
+          redactProviderIds: true
+        }
+      );
       appendFeed({
         role: 'assistant',
-        title: `ORION [${providerLabel || 'router'}] (${latencyMs}ms)`,
-        body: kernel.renderer.stripAnsi(response),
+        title: `ORION [${cleanBadge}] (${latencyMs}ms)`,
+        body: cleanBody,
         statusBadge: 'COMPLETED'
       });
     };
@@ -757,16 +895,58 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
           return;
         }
 
-        if (cmdName === '/vivid') {
+        if (cmdName === '/vivid' || cmdName === '/visual') {
           const entry = kernel.commandRegistry.getCommand('/vivid');
           if (entry) {
             const res = await entry.handler(cmdArgs, trimmed);
             setVividMode(kernel.commandRegistry.isVividMode());
+            setAnimationsEnabled(kernel.commandRegistry.isAnimationsEnabled());
             appendFeed({
               role: 'system',
               title: '/vivid',
               body: res.summary,
               statusBadge: kernel.commandRegistry.isVividMode() ? 'VIVID' : 'MINIMAL'
+            });
+            return;
+          }
+        }
+
+        if (
+          cmdName === '/animations' ||
+          cmdName === '/animation' ||
+          cmdName === '/motion'
+        ) {
+          const entry = kernel.commandRegistry.getCommand('/animations');
+          if (entry) {
+            const res = await entry.handler(cmdArgs, trimmed);
+            setVividMode(kernel.commandRegistry.isVividMode());
+            setAnimationsEnabled(kernel.commandRegistry.isAnimationsEnabled());
+            appendFeed({
+              role: 'system',
+              title: '/animations',
+              body: res.summary,
+              statusBadge: kernel.commandRegistry.isAnimationsEnabled() ? 'ON' : 'OFF'
+            });
+            return;
+          }
+        }
+
+        if (cmdName === '/tip' || cmdName === '/tips') {
+          const sub = (cmdArgs[0] || 'next').toLowerCase();
+          if (sub !== 'list' && !hasActivityFeed) {
+            const dir = sub === 'prev' || sub === 'previous' ? 'prev' : 'next';
+            setActiveTip(kernel.commandRegistry.cycleTip(dir));
+            return;
+          }
+          const entry = kernel.commandRegistry.getCommand('/tip');
+          if (entry) {
+            const res = await entry.handler(cmdArgs, trimmed);
+            setActiveTip(kernel.commandRegistry.getCurrentTip());
+            appendFeed({
+              role: 'system',
+              title: '/tip',
+              body: res.summary,
+              statusBadge: 'TIP'
             });
             return;
           }
@@ -834,6 +1014,7 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
           });
           setStreamingBuffer('');
           setVividMode(kernel.commandRegistry.isVividMode());
+          setAnimationsEnabled(kernel.commandRegistry.isAnimationsEnabled());
           setUiMode(kernel.harness.getMode());
           setUiEffort(kernel.harness.getEffort());
           if (taskSignal.aborted || kernel.getTaskExecutionState() === 'cancelled') {
@@ -954,21 +1135,28 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
         return;
       }
 
-      // Ctrl+P opens a live Runtime Settings & Policy Status card
+      // Ctrl+P opens a live Runtime Settings & Policy Status card (with provider-neutral engine identity & logical workspace path)
       if (key.ctrl && input === 'p') {
         const rs = kernel.omniRouter.getStatus();
+        const engineIdentity = resolvePublicEngineIdentity(rs.id, rs.currentModel);
         const policyOk = kernel.policyService.verifyProtectedPolicyIntegrity().valid;
         const estop = ProcessSupervisor.getInstance().isEstopActive();
         appendFeed({
           role: 'system',
           title: 'ORION Runtime Settings & Governance Status',
           body: [
-            `Mode: ${kernel.harness.getMode()}  |  Effort: ${kernel.harness.getEffort()}  |  Space Visuals: ${vividMode ? 'Vivid' : 'Minimal'}`,
-            `Active Engine: ${rs.id}/${rs.currentModel}  |  Protected Policy: ${policyOk ? 'VERIFIED' : 'DEGRADED'}  |  E-Stop: ${estop ? 'ENGAGED' : 'CLEAR'}`,
-            `Working Directory: ${kernel.projectRoot}`
+            `Mode: ${kernel.harness.getMode()}  |  Effort: ${kernel.harness.getEffort()}  |  Visuals: ${vividMode ? 'Vivid' : 'Minimal'}  |  Animations: ${animationsEnabled ? 'On' : 'Off'}`,
+            `Active Engine: ${engineIdentity.publicLabel} (${engineIdentity.tierDescription})  |  Policy: ${policyOk ? 'VERIFIED' : 'DEGRADED'}  |  E-Stop: ${estop ? 'ENGAGED' : 'CLEAR'}`,
+            `Workspace: ${formatLogicalPath(kernel.projectRoot, kernel.projectRoot)}`
           ].join('\n'),
           statusBadge: 'STATUS'
         });
+        return;
+      }
+
+      // Alt+T manually cycles to the next useful ORION tip without altering input focus or inserting characters
+      if (key.meta && (input === 't' || input === 'T')) {
+        setActiveTip(kernel.commandRegistry.cycleTip('next'));
         return;
       }
 
@@ -1160,6 +1348,15 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
   useInput(stableInputHandler, { isActive: isRawModeSupported });
 
   const routerStatus = kernel.omniRouter.getStatus();
+  const publicEngineIdentity = resolvePublicEngineIdentity(
+    routerStatus.id,
+    routerStatus.currentModel
+  );
+  const streamGlyph = motionActive ? '⟳' : '⋯';
+  const tipSegments = useMemo(
+    () => parseTipSegments(activeTip.template),
+    [activeTip.template]
+  );
   const estopActive = ProcessSupervisor.getInstance().isEstopActive();
   const pendingQueue: PendingApprovalRequest[] =
     kernel.securityMiddleware.getPendingApprovals();
@@ -1195,6 +1392,7 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
             columns={layout.viewportCols}
             rows={layout.topStarRows}
             vividMode={vividMode}
+            animationsEnabled={motionActive}
             noColor={noColor}
             externalTick={frameClock.tick}
             deltaMs={frameClock.deltaMs}
@@ -1268,7 +1466,7 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
                 flexShrink={0}
               >
                 <Text bold color={noColor ? undefined : '#38bdf8'} wrap="truncate-end">
-                  ⟳ Streaming [{routerStatus.id}/{routerStatus.currentModel}]...
+                  {streamGlyph} Streaming [{publicEngineIdentity.publicLabel}]...
                 </Text>
                 <Text wrap="truncate-end">
                   {streamingBuffer.split('\n').slice(-4).join('\n')}
@@ -1331,6 +1529,8 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
           isBusy={isBusy}
           estopActive={estopActive}
           vividMode={vividMode}
+          animationsEnabled={animationsEnabled && isTerminalFocused}
+          motionActive={motionActive}
           attachedFilesCount={attachedCount}
           pendingApprovalsCount={pendingQueue.length}
           compactHeader={layout.compactHeader}
@@ -1352,6 +1552,7 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
             columns={layout.viewportCols}
             rows={layout.bottomStarRows}
             vividMode={vividMode}
+            animationsEnabled={motionActive}
             noColor={noColor}
             externalTick={frameClock.tick}
             deltaMs={frameClock.deltaMs}
@@ -1361,14 +1562,24 @@ export const OrionTuiView: React.FC<OrionTuiViewProps> = ({
 
         {layout.showFooterTip ? (
           <Box justifyContent="center" width={layout.viewportCols} flexShrink={0}>
-            <Text color={noColor ? undefined : '#7dd3fc'}>✦ </Text>
-            <Text color={noColor ? undefined : '#64748b'}>Tip: Use </Text>
-            <Text bold color={noColor ? undefined : '#e2e8f0'}>
-              /vivid
-            </Text>
-            <Text color={noColor ? undefined : '#64748b'}>
-              {' '}
-              to toggle space visuals
+            <Text wrap="truncate-end">
+              <Text color={noColor ? undefined : '#7dd3fc'}>✦ </Text>
+              <Text color={noColor ? undefined : '#64748b'}>Tip: </Text>
+              {tipSegments.map((seg, idx) =>
+                seg.highlight ? (
+                  <Text
+                    key={`tip_seg_${idx}`}
+                    bold
+                    color={noColor ? undefined : '#e2e8f0'}
+                  >
+                    {seg.text}
+                  </Text>
+                ) : (
+                  <Text key={`tip_seg_${idx}`} color={noColor ? undefined : '#64748b'}>
+                    {seg.text}
+                  </Text>
+                )
+              )}
             </Text>
           </Box>
         ) : null}
@@ -1442,6 +1653,9 @@ export async function runOrionInkTui(options: {
         onRequestExit: handleRequestExit,
         registerMouseHandler: (handler) => {
           filteredStdin.setMouseEventHandler(handler);
+        },
+        registerFocusHandler: (handler) => {
+          filteredStdin.setFocusChangeHandler(handler);
         }
       }),
       {

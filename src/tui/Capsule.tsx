@@ -7,6 +7,10 @@ import {
   OrisTaskLifecycleState
 } from './MascotInteractive';
 import { Starfield } from './Starfield';
+import {
+  formatLogicalPath,
+  resolvePublicEngineIdentity
+} from '../shared/branding/OrionEngineIdentity';
 
 export const FULL_HERO_CAPSULE_HEIGHT_ROWS = 21;
 export const COMPACT_CAPSULE_HEIGHT_ROWS = 7;
@@ -73,6 +77,8 @@ export interface CapsuleProps {
   isBusy: boolean;
   estopActive: boolean;
   vividMode: boolean;
+  animationsEnabled?: boolean;
+  motionActive?: boolean;
   attachedFilesCount: number;
   pendingApprovalsCount: number;
   compactHeader?: boolean;
@@ -121,6 +127,8 @@ export const Capsule: React.FC<CapsuleProps> = ({
   isBusy,
   estopActive,
   vividMode,
+  animationsEnabled = true,
+  motionActive,
   attachedFilesCount,
   pendingApprovalsCount,
   compactHeader = false,
@@ -152,9 +160,12 @@ export const Capsule: React.FC<CapsuleProps> = ({
 
   const sideSpaceCols = Math.max(0, Math.floor((safeCols - cardWidth) / 2));
   const showSideStars = !compactHeader && vividMode && sideSpaceCols >= 8;
+  const effectiveMotionActive =
+    typeof motionActive === 'boolean' ? motionActive : Boolean(vividMode && animationsEnabled);
+  const busyGlyph = effectiveMotionActive ? '⟳' : '⋯';
 
-  const rawEngineLabel = `${activeProvider}/${activeModel}`;
-  const maxEngineChars = commandBoxInnerCols >= 64 ? 26 : commandBoxInnerCols >= 50 ? 16 : 10;
+  const rawEngineLabel = resolvePublicEngineIdentity(activeProvider, activeModel).shortBadge;
+  const maxEngineChars = commandBoxInnerCols >= 64 ? 26 : commandBoxInnerCols >= 50 ? 16 : 12;
   const engineLabel =
     rawEngineLabel.length > maxEngineChars
       ? `${rawEngineLabel.slice(0, Math.max(6, maxEngineChars - 1))}…`
@@ -169,7 +180,7 @@ export const Capsule: React.FC<CapsuleProps> = ({
     : pendingApprovalsCount > 0
       ? ' [⏳ APPROVAL]'
       : isBusy
-        ? ` [⟳ ${taskStatusLabel.slice(0, 12)}]`
+        ? ` [${busyGlyph} ${taskStatusLabel.slice(0, 12)}]`
         : '';
 
   const showEngineBadge = commandBoxInnerCols >= 44;
@@ -263,8 +274,8 @@ export const Capsule: React.FC<CapsuleProps> = ({
       <Box justifyContent="center" width={outerInnerCols} flexShrink={0}>
         <Text color={noColor ? undefined : '#cbd5e1'} wrap="truncate-end">
           Tab: Mode <Text color={noColor ? undefined : '#475569'}>|</Text> S-Tab: Effort{' '}
+          <Text color={noColor ? undefined : '#475569'}>|</Text> Alt+T: Tip{' '}
           <Text color={noColor ? undefined : '#475569'}>|</Text> ^P: Status{' '}
-          <Text color={noColor ? undefined : '#475569'}>|</Text> @: Attach{' '}
           <Text color={noColor ? undefined : '#475569'}>|</Text> /: Skills{' '}
           <Text color={noColor ? undefined : '#475569'}>|</Text> Esc: Cancel
         </Text>
@@ -287,12 +298,13 @@ export const Capsule: React.FC<CapsuleProps> = ({
     );
 
   if (compactHeader) {
-    const statusText = isBusy ? `⟳ ${taskStatusLabel}` : `● ${taskStatusLabel}`;
+    const statusText = isBusy ? `${busyGlyph} ${taskStatusLabel}` : `● ${taskStatusLabel}`;
+    const logicalCwd = formatLogicalPath(workingDirectory, workingDirectory);
     const maxCwdLen = Math.max(10, outerInnerCols - 22 - statusText.length);
     const displayCwd =
-      workingDirectory.length > maxCwdLen
-        ? `…${workingDirectory.slice(-(maxCwdLen - 1))}`
-        : workingDirectory;
+      logicalCwd.length > maxCwdLen
+        ? `…${logicalCwd.slice(-(maxCwdLen - 1))}`
+        : logicalCwd;
 
     return (
       <Box flexDirection="column" width="100%" alignItems="center" flexShrink={0}>
@@ -340,6 +352,7 @@ export const Capsule: React.FC<CapsuleProps> = ({
           columns={sideSpaceCols - 1}
           rows={19}
           vividMode={vividMode}
+          animationsEnabled={animationsEnabled}
           noColor={noColor}
           externalTick={externalTick}
           deltaMs={deltaMs}
@@ -362,6 +375,7 @@ export const Capsule: React.FC<CapsuleProps> = ({
           columns={outerInnerCols}
           rows={rows}
           vividMode={vividMode}
+          animationsEnabled={animationsEnabled}
           noColor={noColor}
           taskLifecycle={mascotLifecycle}
           statusCaption={mascotStatusCaption}
@@ -399,6 +413,7 @@ export const Capsule: React.FC<CapsuleProps> = ({
           columns={sideSpaceCols - 1}
           rows={19}
           vividMode={vividMode}
+          animationsEnabled={animationsEnabled}
           noColor={noColor}
           externalTick={externalTick}
           deltaMs={deltaMs}

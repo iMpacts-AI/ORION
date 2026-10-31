@@ -1,84 +1,90 @@
-# ◈ ORION — Reliability-First CLI Agent Harness & Windows 11 Computer-Use Platform
+# ◈ ORION — Autonomous CLI Agent Harness & Visible Computer-Use Operating Layer
 
-**Organization:** [iMpacts-AI](https://impacts-ai.com) (`NETWORK • REASON • IMPACT`)  
+**Organization:** [iMpact AI](https://impacts-ai.com) (`NETWORK • REASON • IMPACT`)  
 **Founder & Chief Systems Architect:** Sheikh Mohammed Saqib ([@SaqibsAura](https://github.com/SaqibsAura))  
 **Repository:** [https://github.com/iMpacts-AI/ORION](https://github.com/iMpacts-AI/ORION)  
-**Primary Interface:** ORION CLI (`node bin/orion.js` / `orion`)
+**Primary Interface:** Global `orion` CLI (`orion`, `orion "<prompt>"`, `orion upgrade`, `orion doctor`)
 
 ---
 
 ## 1. Overview
 
-**ORION** is a local-first, security-governed AI command-line agent harness built primarily for Windows 11 workstations. It translates natural-language goals and slash commands into schema-validated, permission-checked computer, browser, filesystem, media, and engineering actions — verifying real postconditions before reporting completion.
+**ORION** is a local-first, security-governed AI command-line environment and computer-use harness built primarily for Windows 11 workstations (with portable CLI and browser runtime support across macOS and Linux). It translates natural-language requests and slash commands into schema-validated, permission-checked browser, desktop, filesystem, media, and software-engineering actions — verifying real postconditions before reporting completion.
 
-### Key Architectural Pillars
+### Core Capabilities
 
-1. **Unified Verified Execution Pipeline:**
-   - Every task flows through `intent -> plan -> typed tool call -> schema validation -> permission gate -> operator approval (if required) -> execution -> observation -> postcondition verification -> bounded recovery -> truthful outcome`.
-   - Distinguishes explicit runtime outcome states: `completed_verified`, `launched_unverified`, `partially_completed`, `permission_required`, `cancelled`, `timed_out`, and `failed`.
-2. **Windows 11 Multi-Source Application Discovery & Safe Launching:**
-   - Resolves installed desktop applications across Catalog, Windows Registry `App Paths`, `%LOCALAPPDATA%\Programs` (including official **ArtCraft** portable tools: `ArtCraft Launcher`, `PdfCraft`, `PhotoCraft`, `GridCraft`, `WordCraft`, `DeckCraft`, `VectorCraft`), Start Menu `.lnk` shortcuts, `PATH`, and Microsoft Store `AppsFolder` AUMIDs.
-   - Spawns executables with `shell: false` and validated `string[]` arguments (preserving paths with spaces while blocking shell injection and administrative/LOLBin binaries).
-3. **Chrome Profile-Aware Workflows & Auth Pause:**
-   - Reuses the operator's active Chrome profile (`--profile-directory=<last_used>` read solely from Chrome `Local State` directory metadata — never reading, copying, or decrypting Cookies, Login Data, Web Data, or tokens).
-   - Automatically detects Google Account Chooser, SSO sign-in, 2FA/MFA, and CAPTCHA interruptions and pauses cleanly (`PAUSED_FOR_USER_AUTH` -> `permission_required`) for user completion.
-4. **Truthful Windows Media & Spotify Control:**
-   - Inspects WinRT `GlobalSystemMediaTransportControlsSessionManager` (with window-title fallback) and passes Spotify URIs via environment parameterization (`$env:ORION_SPOTIFY_URI`) with zero shell string interpolation.
-5. **Non-Overridable Security Governance & Global Escape-to-Cancel (`Esc`):**
-   - Single shared policy/approval state across `OrionCliKernel`, `ToolService`, and `HarnessOrchestrator`, backed by SHA-256 integrity-verified [`config/policies/orion-protected-policy.v1.json`](config/policies/orion-protected-policy.v1.json).
-   - Schema validation runs **before** approval token consumption so malformed calls never burn single-use SHA-256 action-bound tokens.
-   - Pressing `Esc` cancels active model streaming, multi-step plans, browser operations, and ORION-owned subprocesses immediately without killing detached user desktop apps or locking Emergency Stop (`/stop`).
-6. **Reference-Faithful Deep-Space CLI & Interactive Pixel-Art Oris Mascot:**
-   - Full-screen alternate-buffer React + Ink TUI featuring deep midnight-navy space visuals, multi-layer twinkling stars, diagonal shooting stars, a centered slate-blue command capsule, live mode/engine badges, and **Oris** (`18x18` canonical pixel-art sprite rendered in 24-bit ANSI half-blocks with cursor tracking, click-to-jump sparkles, rapid-click tumble-flip, and `--no-color` fallback).
-7. **Sovereign Local Ollama Routing (`$0.00` Mandatory API Spend):**
-   - Routes across local Ollama models (`llama3.1:8b`, `qwen2.5-coder:7b`, `deepseek-r1:14b`, `gpt-oss:20b`, `gemma4:26b`, `qwen3-coder:30b`) with deterministic offline fallback when no model daemon is running.
+1. **Standalone Global CLI & SHA-256 Verified `orion upgrade`:**
+   - Installs as a self-contained versioned release (`<orion-install>`, `%LOCALAPPDATA%\orion` on Windows / `~/.local/share/orion` on Unix) so `orion` works from **any** directory without requiring a Git checkout.
+   - `orion upgrade` verifies official HTTPS GitHub Releases with `.part` download staging, mandatory SHA-256 checksum validation, `previous` backup retention, automatic rollback on failure, and `~/.orion` (`<orion-home>`) user-data preservation.
+2. **Smooth Full-Screen Terminal UI (`Vivid` & `Minimal` + Independent `/animations`):**
+   - Coordinated line-diff ANSI renderer (`CoordinatedFrameStream`) with synchronized DECSET `2026` output, SGR mouse filtering, and DECSET `1004` focus/blur pause (`0` frames/sec and `0.00%` CPU when unfocused).
+   - Persisted `Vivid` and `Minimal` visual modes (`/vivid`) paired with an independent `/animations` preference supporting all 4 mode×animation combinations.
+   - **41 Curated Rotating Workflow Tips** across 11 categories (~10s Home auto-rotation plus manual cycling via `Alt+T`, `/tip`, or clicking the footer tip while keeping `Tab` for mode/autocomplete switching).
+   - **Canonical `18x18` Pixel-Art Oris Mascot** with memoized 24-bit half-block rendering, ~2.4s calm idle breathing, occasional cosmic sway, and a ~1,140ms 6-stage click-to-jump arc.
+3. **Visible Foreground Chrome & Windows 11 Desktop Automation:**
+   - Launches and focuses real visible Chrome windows, reuses the operator's active profile directory from `Local State` metadata (never reading or copying Cookies, Login Data, or tokens), visibly types and submits searches, navigates pages, and automatically pauses (`PAUSED_FOR_USER_AUTH`) at login, Account Chooser, 2FA/MFA, CAPTCHA, and OAuth consent screens.
+   - Resolves Windows 11 desktop apps (Catalog, Registry `App Paths`, `%LOCALAPPDATA%\Programs`, ArtCraft suite, Start Menu `.lnk`, `PATH`, Store AUMIDs, and `ms-settings:<subpage>` URIs) with `shell: false` argument arrays, executes Win32 mouse/keyboard actions, and verifies cursor/window postconditions with zero false positives.
+4. **Friendly Conversation, Honest Engine Identity & Path Privacy:**
+   - Responds naturally and concisely to casual greetings (`"Hi"`, `"Hello"`, `"Good morning"`) without dumping hardware specs or invoking unnecessary tools; inspects system specs only when explicitly asked.
+   - Displays clean, honest provider-neutral runtime labels (`ORION Local`, `ORION Core`, `ORION Intelligence`) in ordinary UI while disclosing full `provider:model` mappings in `/doctor`.
+   - Protects operator privacy by formatting local paths as `<workspace>`, `<orion-home>`, `<orion-install>`, or `~/...` across ordinary UI, transcripts, and errors.
+5. **Non-Overridable Security Governance & Instant `Esc` Cancellation:**
+   - Enforces SHA-256 integrity-verified [`config/policies/orion-protected-policy.v1.json`](config/policies/orion-protected-policy.v1.json), pre-approval schema validation, single-use action-bound Tier-2 tokens, `<80ms` Escape-to-Cancel (`Esc`) task cancellation, and authoritative `/stop` Emergency Stop.
 
 ---
 
-## 2. Quick Start
+## 2. Quick Start & Global Installation
 
 ```powershell
-# 1. Install dependencies & build TypeScript + Vite bundles
+# 1. Install dependencies & build production bundles
 npm install
 npm run build
 
-# 2. Launch interactive full-screen ORION CLI (Windows Terminal recommended)
-node bin/orion.js
+# 2. Install standalone global `orion` CLI and register User PATH shims
+npm run install:cli
 
-# 3. Single-shot diagnostics & non-interactive commands
-node bin/orion.js "/doctor"
-node bin/orion.js "/status" --json
-node bin/orion.js "/specs" --no-color
+# 3. Run from ANY directory on your workstation
+orion --version
+orion doctor
+orion upgrade --check
+orion "Hi"
+
+# 4. Launch interactive full-screen ORION TUI (Windows Terminal recommended)
+orion
 ```
 
-### Interactive Keyboard Shortcuts & Slash Commands
+### Key Interactive Shortcuts & Commands
 
 | Input / Command | Action |
 | :--- | :--- |
-| `Tab` | Cycle execution mode (`Build` → `Plan` → `Chat`) |
+| `Tab` | Autocomplete `/` menu or cycle execution mode (`Build` → `Plan` → `Chat`) |
 | `Shift+Tab` | Cycle reasoning effort (`low` → `medium` → `high` → `max`) |
-| `Ctrl+P` | Display live Runtime Settings & Governance Status card |
-| `Esc` | Cancel active task / dismiss open menu / deny pending approval prompt |
-| `@<path>` | Attach workspace file into active context |
-| `/help`, `/doctor`, `/status` | Command catalog, policy/system pre-flight check, and live runtime telemetry |
-| `/mode`, `/effort`, `/model` | Inspect or switch execution mode, effort level, and active model provider |
-| `/vivid`, `/clear` | Toggle deep-space starfield visuals (`Vivid` / `Minimal`) or reset viewport |
-| `/undo`, `/redo`, `/rewind` | Non-destructive SHA-256 conflict-checked workspace file undo/redo/checkpoint rewind |
-| `/approve <id>`, `/deny <id>` | Approve or deny pending action-bound Tier-2 tool requests |
-| `/stop` | Engage authoritative Emergency Stop across managed child process trees |
+| `Alt+T` / `/tip` | Cycle immediately to the next curated ORION workflow tip |
+| `Ctrl+P` | Open live Runtime Settings, Visual Mode & Governance Status card |
+| `Esc` | Cancel active generation, browser, or tool workflow cleanly |
+| `/vivid`, `/animations` | Switch `vivid` \| `minimal` visual mode or toggle decorative animations (`on` \| `off`) |
+| `/help`, `/doctor`, `/status`, `/specs` | Command catalog, full diagnostic pre-flight, runtime health, and explicit system specs |
+| `/models`, `/providers`, `/permissions` | Inspect or switch configured models, provider adapters, and 4-tier security policy |
+| `/approve <id>`, `/deny <id>`, `/stop` | Approve/deny pending Tier-2 actions or engage Emergency Stop |
+| `orion upgrade [--check \| --rollback]` | Check, verify (SHA-256), install, or roll back official ORION releases |
 
 ---
 
 ## 3. Verification & Documentation
 
 ```powershell
-# Run all isolated automated test suites
-node run_suites.cjs
+# Run strict TypeScript check + static syntax & path-privacy lint gate
+npm run typecheck
+npm run lint
 
-# Run targeted Reliability, Computer Use, Cancellation & Oris CLI regression suite
-node runner_helper.cjs "src\main\services\__tests__\OrionMasterEngineeringMission.test.ts"
+# Run all isolated automated test suites
+npm test
 ```
 
-- **Capability Matrix & Honest Limitations:** [`docs/capability-matrix.md`](docs/capability-matrix.md)
-- **Windows 11 Setup & Manual Smoke Test Guide:** [`docs/SMOKE_TEST_GUIDE.md`](docs/SMOKE_TEST_GUIDE.md)
+- **Global Installation & Safe Upgrade Guide:** [`docs/INSTALLATION_AND_UPGRADE.md`](docs/INSTALLATION_AND_UPGRADE.md)
+- **CLI Usage, Visual Modes & Interactive Reference:** [`docs/CLI_USAGE.md`](docs/CLI_USAGE.md)
+- **Supported Platforms & Honest Limitations:** [`docs/SUPPORTED_PLATFORMS.md`](docs/SUPPORTED_PLATFORMS.md)
+- **Capability Matrix & Verification Inventory:** [`docs/capability-matrix.md`](docs/capability-matrix.md)
+- **Windows 11 Manual Smoke Test Guide:** [`docs/SMOKE_TEST_GUIDE.md`](docs/SMOKE_TEST_GUIDE.md)
+- **Release Notes (`v1.0.0`):** [`RELEASE_NOTES.md`](RELEASE_NOTES.md)
 - **Protected Agent Security Policy:** [`config/policies/orion-protected-policy.v1.json`](config/policies/orion-protected-policy.v1.json)

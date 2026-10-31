@@ -1,6 +1,18 @@
 import { HarnessEffortLevel, HarnessMode, HarnessPermissionTier } from './ExecutionResult';
 import { HarnessOrchestrator } from './HarnessOrchestrator';
 import { OrionCliKernel } from '../cli/OrionCliKernel';
+import { OrionUpgradeService } from '../cli/OrionUpgradeService';
+import {
+  OrionVisualMode,
+  VisualPreferencesStore
+} from '../tui/VisualPreferences';
+import {
+  OrionTipDefinition,
+  buildAvailableTipPool,
+  cycleManualTip,
+  pickWeightedNextTip,
+  renderTipPlainText
+} from '../tui/OrionTipsEngine';
 
 export type CommandAvailabilityStatus = 'IMPLEMENTED' | 'CONFIGURED' | 'UNAVAILABLE';
 
@@ -40,9 +52,11 @@ export interface SlashCommandEntry {
 export class CommandRegistry {
   public readonly kernel: OrionCliKernel;
   public readonly harness: HarnessOrchestrator;
+  public readonly visualPreferences: VisualPreferencesStore;
   private readonly entries: Map<string, SlashCommandEntry> = new Map();
   private vividMode: boolean = true;
   private onVividChange?: (vivid: boolean) => void;
+  private currentTipId?: string;
 
   constructor(options: {
     kernel: OrionCliKernel;
@@ -57,17 +71,38 @@ export class CommandRegistry {
         omniRouter: this.kernel.omniRouter,
         memoryManager: this.kernel.unifiedMemory
       });
+    this.visualPreferences =
+      this.kernel.visualPreferences ||
+      new VisualPreferencesStore({
+        workspaceRoot: this.kernel.projectRoot,
+        initialFallbackVividMode: this.harness.sessionStore.getActiveSession().vividMode
+      });
     this.onVividChange = options.onVividChange;
-    this.vividMode = this.harness.sessionStore.getActiveSession().vividMode ?? true;
+    this.vividMode = this.visualPreferences.isVividMode();
+    this.harness.sessionStore.updateActiveSession({ vividMode: this.vividMode });
     this.registerAllCommands();
   }
 
   public isVividMode(): boolean {
+    this.vividMode = this.visualPreferences.isVividMode();
     return this.vividMode;
+  }
+
+  public getVisualMode(): OrionVisualMode {
+    return this.visualPreferences.getVisualMode();
+  }
+
+  public isAnimationsEnabled(): boolean {
+    return this.visualPreferences.isAnimationsEnabled();
+  }
+
+  public setAnimationsEnabled(enabled: boolean): boolean {
+    return this.visualPreferences.setAnimationsEnabled(enabled).animationsEnabled;
   }
 
   public setVividMode(enabled: boolean): boolean {
     this.vividMode = enabled;
+    this.visualPreferences.setVisualMode(enabled ? 'vivid' : 'minimal');
     this.harness.sessionStore.updateActiveSession({ vividMode: enabled });
     if (this.onVividChange) {
       try {
@@ -75,6 +110,36 @@ export class CommandRegistry {
       } catch {}
     }
     return this.vividMode;
+  }
+
+  public getAvailableTips(): OrionTipDefinition[] {
+    const implemented = new Set(Array.from(this.entries.keys()).map((k) => k.toLowerCase()));
+    return buildAvailableTipPool({
+      platform: process.platform,
+      implementedCommands: implemented,
+      desktopControlAvailable: process.platform === 'win32'
+    });
+  }
+
+  public getCurrentTip(): OrionTipDefinition {
+    const pool = this.getAvailableTips();
+    if (this.currentTipId) {
+      const existing = pool.find((t) => t.id === this.currentTipId);
+      if (existing) return existing;
+    }
+    const chosen = pickWeightedNextTip(pool);
+    this.currentTipId = chosen.id;
+    return chosen;
+  }
+
+  public cycleTip(direction: 'next' | 'prev' | 'weighted' = 'next'): OrionTipDefinition {
+    const pool = this.getAvailableTips();
+    const nextTip =
+      direction === 'weighted'
+        ? pickWeightedNextTip(pool, this.currentTipId)
+        : cycleManualTip(pool, this.currentTipId, direction);
+    this.currentTipId = nextTip.id;
+    return nextTip;
   }
 
   public register(entry: SlashCommandEntry): void {
@@ -768,26 +833,140 @@ export class CommandRegistry {
       }
     });
 
-    // 17. /vivid
+    // 17. /vivid (Visual Mode: 'vivid' | 'minimal', persisted independently of decorative animation setting)
     this.register({
       command: '/vivid',
-      aliases: [],
+      aliases: ['visual'],
       category: 'Visual & UI',
-      description: 'Toggle Starfield TUI animation between Vivid mode and Minimal reduced-motion mode',
-      argumentHint: '[on | off | toggle]',
+      description: 'Switch persisted visual layout between Vivid space visuals and Minimal quiet presentation',
+      argumentHint: '[on | off | vivid | minimal | toggle | status]',
       permissionTier: 'TIER_1_READ_ONLY',
       availability: 'IMPLEMENTED',
       handler: async (args) => {
         const sub = (args[0] || 'toggle').toLowerCase();
-        let next = !this.vividMode;
+        if (sub === 'status') {
+          const prefs = this.visualPreferences.getPreferences();
+          return {
+            handled: true,
+            exitCode: 0,
+            summary: `Visual mode: ${prefs.visualMode.toUpperCase()} | Decorative animations: ${prefs.animationsEnabled ? 'ON' : 'OFF'}.`,
+            data: { vividMode: prefs.visualMode === 'vivid', ...prefs }
+          };
+        }
+        let next = !this.isVividMode();
         if (sub === 'on' || sub === 'true' || sub === 'vivid') next = true;
         else if (sub === 'off' || sub === 'false' || sub === 'minimal') next = false;
         this.setVividMode(next);
+        const animOn = this.isAnimationsEnabled();
         return {
           handled: true,
           exitCode: 0,
-          summary: `Starfield visual mode set to ${next ? 'VIVID (animated particles & shooting stars)' : 'MINIMAL (reduced motion)'}.`,
-          data: { vividMode: next }
+          summary: next
+            ? `Visual mode set to VIVID (${animOn ? 'deep-space visuals with calm motion' : 'static deep-space visuals; decorative animations OFF'}).`
+            : `Visual mode set to MINIMAL (quiet minimal layout; decorative animations ${animOn ? 'enabled' : 'disabled'}).`,
+          data: {
+            vividMode: next,
+            visualMode: next ? 'vivid' : 'minimal',
+            animationsEnabled: animOn
+          }
+        };
+      }
+    });
+
+    // 17B. /animations (Independent persisted decorative motion preference)
+    this.register({
+      command: '/animations',
+      aliases: ['motion', 'animation'],
+      category: 'Visual & UI',
+      description: 'Enable or disable decorative starfield/mascot motion independently of Vivid/Minimal visual mode',
+      argumentHint: '[on | off | toggle | status]',
+      permissionTier: 'TIER_1_READ_ONLY',
+      availability: 'IMPLEMENTED',
+      handler: async (args) => {
+        const sub = (args[0] || 'toggle').toLowerCase();
+        if (sub === 'status') {
+          const prefs = this.visualPreferences.getPreferences();
+          return {
+            handled: true,
+            exitCode: 0,
+            summary: `Decorative animations: ${prefs.animationsEnabled ? 'ON' : 'OFF'} (Visual mode: ${prefs.visualMode.toUpperCase()}).`,
+            data: prefs
+          };
+        }
+        let next = !this.isAnimationsEnabled();
+        if (sub === 'on' || sub === 'true' || sub === 'enable' || sub === 'enabled') next = true;
+        else if (sub === 'off' || sub === 'false' || sub === 'disable' || sub === 'disabled') next = false;
+        this.setAnimationsEnabled(next);
+        const prefs = this.visualPreferences.getPreferences();
+        return {
+          handled: true,
+          exitCode: 0,
+          summary: `Decorative animations ${next ? 'ENABLED' : 'DISABLED (0 decorative timers running; functional updates active)'} [Visual mode: ${prefs.visualMode.toUpperCase()}].`,
+          data: prefs
+        };
+      }
+    });
+
+    // 17C. /tip (Curated ORION tip rotation & manual cycling)
+    this.register({
+      command: '/tip',
+      aliases: ['tips'],
+      category: 'Visual & UI',
+      description: 'Cycle through curated ORION shortcuts, capabilities, browser/desktop workflows, and safety tips',
+      argumentHint: '[next | prev | list]',
+      permissionTier: 'TIER_1_READ_ONLY',
+      availability: 'IMPLEMENTED',
+      handler: async (args) => {
+        const sub = (args[0] || 'next').toLowerCase();
+        if (sub === 'list') {
+          const pool = this.getAvailableTips();
+          const preview = pool
+            .slice(0, 8)
+            .map((t) => `• [${t.category}] ${renderTipPlainText(t.template)}`)
+            .join('\n');
+          return {
+            handled: true,
+            exitCode: 0,
+            summary: `ORION Curated Tips (${pool.length} available across 11 categories):\n${preview}`,
+            data: { totalTips: pool.length, tips: pool }
+          };
+        }
+        const dir = sub === 'prev' || sub === 'previous' ? 'prev' : 'next';
+        const tip = this.cycleTip(dir);
+        const plain = renderTipPlainText(tip.template);
+        return {
+          handled: true,
+          exitCode: 0,
+          summary: `✦ Tip: ${plain}`,
+          data: { tipId: tip.id, category: tip.category, priority: tip.priority, text: plain }
+        };
+      }
+    });
+
+    // 17c. /upgrade (check release update availability from inside interactive TUI)
+    this.register({
+      command: '/upgrade',
+      aliases: ['/update'],
+      category: 'System & Workstation',
+      description: 'Check official stable ORION release availability (run `orion upgrade` in terminal to install)',
+      argumentHint: '[check]',
+      permissionTier: 'TIER_1_READ_ONLY',
+      availability: 'IMPLEMENTED',
+      handler: async () => {
+        const upgrader = new OrionUpgradeService();
+        const check = await upgrader.checkLatestRelease();
+        const summary = !check.checked
+          ? `ORION release check: ${check.reason || 'Unable to query official release feed.'} (Current: v${check.currentVersion})`
+          : !check.latestVersion
+            ? `ORION v${check.currentVersion} is installed. ${check.reason || 'No newer published stable release found.'}`
+            : check.updateAvailable
+              ? `Update available: v${check.currentVersion} -> v${check.latestVersion}. Exit and run \`orion upgrade\` to verify SHA-256 and install.`
+              : `ORION is up to date (v${check.currentVersion}).`;
+        return {
+          handled: true,
+          exitCode: 0,
+          summary,
+          data: check
         };
       }
     });

@@ -8,9 +8,16 @@ const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 export function resolveNativeInputExe(): string | null {
+  const installRoot = process.env.ORION_INSTALL_ROOT ? path.resolve(process.env.ORION_INSTALL_ROOT) : '';
   const candidates = [
     path.join(__dirname, '..', '..', 'platform', 'win32-native-input.exe'),
     path.join(__dirname, '..', 'platform', 'win32-native-input.exe'),
+    ...(installRoot
+      ? [
+          path.join(installRoot, 'src', 'main', 'platform', 'win32-native-input.exe'),
+          path.join(installRoot, 'bin', 'win32-native-input.exe')
+        ]
+      : []),
     path.resolve(process.cwd(), 'src/main/platform/win32-native-input.exe'),
     path.resolve(process.cwd(), 'dist-electron/main/platform/win32-native-input.exe'),
     path.join(process.resourcesPath || '', 'app', 'src', 'main', 'platform', 'win32-native-input.exe'),
@@ -313,8 +320,10 @@ export class WindowsNativeInputDriver implements IInputDriver {
 
 export class MockInputDriver implements IInputDriver {
   public history: Array<{ action: string; args: any }> = [];
+  public cursorPosition: ScreenPoint = { x: 960, y: 540 };
 
   public async mouseMove(x: number, y: number): Promise<void> {
+    this.cursorPosition = { x: Math.round(x), y: Math.round(y) };
     this.history.push({ action: 'mouseMove', args: { x, y } });
   }
   public async mouseClick(button: 'left' | 'right' | 'middle' = 'left'): Promise<void> {
@@ -333,6 +342,7 @@ export class MockInputDriver implements IInputDriver {
     this.history.push({ action: 'scroll', args: { amount } });
   }
   public async drag(from: ScreenPoint, to: ScreenPoint): Promise<void> {
+    this.cursorPosition = { x: Math.round(to.x), y: Math.round(to.y) };
     this.history.push({ action: 'drag', args: { from, to } });
   }
   public async typeText(text: string): Promise<void> {
@@ -440,6 +450,21 @@ export class InputControlService {
     delta?: { dx: number; dy: number };
     reason?: string;
   }> {
+    if (this.driver instanceof MockInputDriver) {
+      const currentPos = { ...this.driver.cursorPosition };
+      const dx = Math.abs(currentPos.x - expectedX);
+      const dy = Math.abs(currentPos.y - expectedY);
+      if (dx <= tolerance && dy <= tolerance) {
+        return { verified: true, status: 'INPUT_VERIFIED', currentPos, delta: { dx, dy } };
+      }
+      return {
+        verified: false,
+        status: 'INPUT_FAILED',
+        currentPos,
+        delta: { dx, dy },
+        reason: `Mock cursor offset (dx=${dx}, dy=${dy}) exceeded tolerance ${tolerance}.`
+      };
+    }
     const env = await this.getEnvironmentStatus();
     const exe = resolveNativeInputExe();
     if (!exe || !env.isInteractive || !env.isVerificationAvailable) {

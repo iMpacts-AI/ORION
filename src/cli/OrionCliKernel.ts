@@ -22,6 +22,11 @@ import { OrionLocalApiServer } from '../main/services/OrionLocalApiServer';
 import { ZeroBureaucracyService } from '../main/services/ZeroBureaucracyService';
 import { HarnessOrchestrator } from '../harness/HarnessOrchestrator';
 import { CommandRegistry } from '../harness/CommandRegistry';
+import { VisualPreferencesStore } from '../tui/VisualPreferences';
+import {
+  resolvePublicEngineIdentity,
+  sanitizeConversationalResponse
+} from '../shared/branding/OrionEngineIdentity';
 import { eventBus } from '../shared/events';
 import { ToolCall, ToolResult } from '../shared/types';
 import { OrionCliRenderer } from './OrionCliRenderer';
@@ -56,6 +61,7 @@ export class OrionCliKernel {
   public readonly localApiServer: OrionLocalApiServer;
   public readonly hackathonService: ZeroBureaucracyService;
   public readonly harness: HarnessOrchestrator;
+  public readonly visualPreferences: VisualPreferencesStore;
   public readonly commandRegistry: CommandRegistry;
 
   private unsubscribers: Array<() => void> = [];
@@ -127,6 +133,10 @@ export class OrionCliKernel {
       securityMiddleware: this.securityMiddleware,
       policyService: this.policyService,
       riskEvaluator: this.riskEvaluator
+    });
+    this.visualPreferences = new VisualPreferencesStore({
+      workspaceRoot: this.projectRoot,
+      initialFallbackVividMode: this.harness.sessionStore.getActiveSession().vividMode
     });
     this.commandRegistry = new CommandRegistry({
       kernel: this,
@@ -561,6 +571,10 @@ export class OrionCliKernel {
         onToken: tokenHandler,
         signal: taskSignal
       });
+      result.response = sanitizeConversationalResponse(result.response, {
+        workspaceRoot: this.projectRoot,
+        redactProviderIds: true
+      });
 
       if (startedTerminalStream) {
         this.renderer.endStream();
@@ -640,12 +654,17 @@ export class OrionCliKernel {
       });
 
       const activeProvider = this.omniRouter.getStatus();
+      const publicIdentity = resolvePublicEngineIdentity(
+        activeProvider.id,
+        activeProvider.currentModel
+      );
       if (this.renderer.isJsonMode()) {
         this.renderer.writeJson({
           query: result.query,
           response: result.response,
           success: result.success,
           activeAgent: this.agentSystem.getActiveAgentId(),
+          engine: publicIdentity.publicLabel,
           provider: `${activeProvider.id}:${activeProvider.currentModel}`,
           toolCallsExecuted: result.toolCallsExecuted,
           toolResults: result.toolResults,
@@ -655,7 +674,7 @@ export class OrionCliKernel {
         this.renderer.renderAssistantResponse(
           result.response,
           result.metrics.totalCommandLatencyMs,
-          `${activeProvider.id}:${activeProvider.currentModel}`
+          publicIdentity.publicLabel
         );
       }
 
@@ -912,6 +931,9 @@ export class OrionCliKernel {
     }
     this.unsubscribers = [];
     this.mcpClient.shutdownAll();
+    try {
+      this.toolService.getBrowserProvider().close().catch(() => {});
+    } catch {}
     if (this.localApiServer.getStatus().running) {
       this.localApiServer.stop().catch(() => {});
     }

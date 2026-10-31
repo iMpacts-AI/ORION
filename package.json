@@ -21,11 +21,13 @@
     "doctor": "node bin/orion.js doctor",
     "dev": "node node_modules/vite/bin/vite.js",
     "build": "node node_modules/typescript/bin/tsc && node node_modules/vite/bin/vite.js build",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "test": "node run_suites.cjs",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "node node_modules/typescript/bin/tsc --noEmit && node scripts/lint-check.cjs",
     "preview": "vite preview",
     "install:cli": "node bin/install-cli.js",
     "setup:cli": "node bin/install-cli.js",
+    "upgrade:cli": "node bin/orion.js upgrade --check",
     "package": "node node_modules/electron-builder/cli.js --dir",
     "dist:portable": "node node_modules/electron-builder/cli.js --win portable"
   },
@@ -62,7 +64,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.6.0",
-    "three": "^0.170.0"
+    "three": "^0.170.0",
+    "typescript": "^5.7.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
@@ -75,7 +78,6 @@
     "electron-builder": "^25.1.8",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.7.2",
     "vite": "^6.0.5",
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6"

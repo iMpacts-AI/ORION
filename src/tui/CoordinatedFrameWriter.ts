@@ -246,8 +246,12 @@ export class CoordinatedFrameStream extends Writable {
   }
 }
 
+export const FOCUS_TRACKING_ENABLE_SEQ = '\x1b[?1004h';
+export const FOCUS_TRACKING_DISABLE_SEQ = '\x1b[?1004l';
+
 export interface FilteredTtyInputStreamOptions {
   onMouseEvents?: (events: SgrMouseEvent[]) => void;
+  onFocusChange?: (focused: boolean) => void;
 }
 
 const TERMINAL_FOCUS_REPORT_RE = /\x1b\[[IO]/g;
@@ -280,6 +284,8 @@ export function tokenizeTerminalKeypresses(cleanedInput: string): string[] {
 export class FilteredTtyInputStream extends PassThrough {
   private readonly sourceStdin: NodeJS.ReadStream;
   private onMouseEventsCallback?: (events: SgrMouseEvent[]) => void;
+  private onFocusChangeCallback?: (focused: boolean) => void;
+  private terminalFocused = true;
   private attached = false;
   private disposed = false;
 
@@ -295,6 +301,7 @@ export class FilteredTtyInputStream extends PassThrough {
     super({ objectMode: true });
     this.sourceStdin = sourceStdin;
     this.onMouseEventsCallback = options.onMouseEvents;
+    this.onFocusChangeCallback = options.onFocusChange;
   }
 
   public override setEncoding(_encoding: BufferEncoding): this {
@@ -304,6 +311,14 @@ export class FilteredTtyInputStream extends PassThrough {
 
   public setMouseEventHandler(handler?: (events: SgrMouseEvent[]) => void): void {
     this.onMouseEventsCallback = handler;
+  }
+
+  public setFocusChangeHandler(handler?: (focused: boolean) => void): void {
+    this.onFocusChangeCallback = handler;
+  }
+
+  public isTerminalFocused(): boolean {
+    return this.terminalFocused;
   }
 
   public get isTTY(): boolean {
@@ -351,6 +366,17 @@ export class FilteredTtyInputStream extends PassThrough {
       }
     }
 
+    const focusTokens = rawStr.match(/\x1b\[[IO]/g);
+    if (focusTokens && focusTokens.length > 0) {
+      const nextFocused = focusTokens[focusTokens.length - 1] === '\x1b[I';
+      if (this.terminalFocused !== nextFocused) {
+        this.terminalFocused = nextFocused;
+        if (this.onFocusChangeCallback) {
+          this.onFocusChangeCallback(nextFocused);
+        }
+      }
+    }
+
     const cleaned = stripSgrMouseSequences(rawStr).replace(TERMINAL_FOCUS_REPORT_RE, '');
     if (cleaned.length > 0) {
       const tokens = tokenizeTerminalKeypresses(cleaned);
@@ -381,5 +407,6 @@ export class FilteredTtyInputStream extends PassThrough {
     this.disposed = true;
     this.detachSourceListener();
     this.onMouseEventsCallback = undefined;
+    this.onFocusChangeCallback = undefined;
   }
 }

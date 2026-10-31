@@ -1002,6 +1002,21 @@ export class WindowsAppResolver {
       };
     }
 
+    // 1b. Safe Windows Settings Subpage Protocol URIs (e.g. ms-settings:display, ms-settings:sound, ms-settings:network)
+    if (/^ms-settings:[a-z0-9_-]{0,48}$/i.test(normalized)) {
+      return {
+        canonicalId: 'settings',
+        displayName: 'Settings',
+        executableName: normalized,
+        resolvedExecutablePath: normalized,
+        existsOnDisk: true,
+        isProtocolUri: true,
+        discoverySource: 'PROTOCOL_URI',
+        defaultArgs: [],
+        processNames: ['systemsettings.exe', 'applicationframehost.exe', 'settings']
+      };
+    }
+
     // 2. Direct Catalog Candidate Paths
     if (entry) {
       for (const candidate of entry.candidatePaths) {

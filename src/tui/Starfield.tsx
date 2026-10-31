@@ -30,6 +30,7 @@ export interface StarfieldProps {
   columns: number;
   rows: number;
   vividMode: boolean;
+  animationsEnabled?: boolean;
   noColor?: boolean;
   externalTick?: number;
   deltaMs?: number;
@@ -159,17 +160,20 @@ export function projectStarfieldAtTick(
     return { stars: initialStars, shootingStar: initialShooting };
   }
 
-  const clampedDtSec = Math.max(0.016, Math.min(tickDeltaMs || 160, 400) / 1000);
+  const clampedDtSec = Math.max(0.016, Math.min(tickDeltaMs || 220, 400) / 1000);
   const totalSec = tick * clampedDtSec;
+  const isNarrowSideBand = safeCols <= 28;
+  const speedScale = isNarrowSideBand ? 0.28 : 0.65;
+  const twinkleScale = isNarrowSideBand ? 0.35 : 0.75;
 
   const projectedStars: StarParticle[] = initialStars.map((s) => {
-    let nextX = (s.x + s.vx * totalSec) % safeCols;
+    let nextX = (s.x + s.vx * totalSec * speedScale) % safeCols;
     if (nextX < 0) nextX += safeCols;
 
-    let nextY = (s.y + s.vy * totalSec) % safeRows;
+    let nextY = isNarrowSideBand ? s.y : (s.y + s.vy * totalSec * speedScale) % safeRows;
     if (nextY < 0) nextY += safeRows;
 
-    const nextPhase = (s.twinklePhase + s.twinkleSpeed * totalSec * 3) % 12;
+    const nextPhase = (s.twinklePhase + s.twinkleSpeed * totalSec * twinkleScale) % 12;
     const glyphIdx = Math.floor(nextPhase) % STAR_GLYPHS.length;
     const brightness: StarParticle['brightness'] =
       nextPhase > 9
@@ -197,9 +201,9 @@ export function projectStarfieldAtTick(
     stepsRemaining: 0
   };
 
-  if (safeRows >= 2 && safeCols >= 18) {
+  if (safeRows >= 2 && safeCols >= 36) {
     const cycleOffset = tick + seedOffset;
-    const stepInCycle = cycleOffset % 13;
+    const stepInCycle = cycleOffset % 31;
     if (stepInCycle <= 2) {
       const launchTick = tick - stepInCycle;
       if (launchTick >= 0) {
@@ -255,14 +259,15 @@ const ANSI_STAR_CYAN = '\x1b[38;2;125;211;252m';
 const ANSI_STAR_VIOLET = '\x1b[38;2;196;181;253m';
 const ANSI_STAR_DIM = '\x1b[38;2;100;116;139m';
 
-export const Starfield: React.FC<StarfieldProps> = ({
+const StarfieldInner: React.FC<StarfieldProps> = ({
   ink,
   columns,
   rows,
   vividMode,
+  animationsEnabled = true,
   noColor = false,
   externalTick,
-  deltaMs = 160,
+  deltaMs = 220,
   seedOffset = 0
 }) => {
   const Box: React.ComponentType<any> = ink?.Box || ('div' as any);
@@ -275,29 +280,51 @@ export const Starfield: React.FC<StarfieldProps> = ({
 
   // Fallback internal timer ONLY when rendered standalone without a parent coordinated scheduler
   useEffect(() => {
-    if (!vividMode || externalTick !== undefined || fieldHeight <= 0 || fieldWidth < 4) {
+    if (
+      !vividMode ||
+      !animationsEnabled ||
+      externalTick !== undefined ||
+      fieldHeight <= 0 ||
+      fieldWidth < 4
+    ) {
       return;
     }
     const timer = setInterval(() => {
       setInternalTick((prev) => prev + 1);
-    }, 240);
+    }, 280);
 
     if (typeof timer.unref === 'function') {
       timer.unref();
     }
     return () => clearInterval(timer);
-  }, [vividMode, externalTick, fieldHeight, fieldWidth]);
+  }, [vividMode, animationsEnabled, externalTick, fieldHeight, fieldWidth]);
 
   const safeWidth = Math.max(4, fieldWidth);
   const safeHeight = Math.max(1, fieldHeight);
-  const maxStarsForBand = Math.min(42, Math.max(4, Math.floor((safeWidth * safeHeight) / 18)));
+  const isSideBand = safeWidth <= 28 && safeHeight >= 12;
+  const maxStarsForBand = isSideBand
+    ? Math.min(5, Math.max(3, Math.floor((safeWidth * safeHeight) / 80)))
+    : Math.min(26, Math.max(4, Math.floor((safeWidth * safeHeight) / 26)));
 
-  const initialStars = useMemo(
-    () => generateDeterministicStars(safeWidth, safeHeight, maxStarsForBand, seedOffset),
-    [safeWidth, safeHeight, maxStarsForBand, seedOffset]
-  );
+  const initialStars = useMemo(() => {
+    const base = generateDeterministicStars(safeWidth, safeHeight, maxStarsForBand, seedOffset);
+    if (!isSideBand) return base;
+    // Keep side-band atmospheric stars off the 9 central 24-bit Oris rows (rows 1..10) so side twinkles
+    // never force unnecessary 24-bit truecolor Oris sprite row re-serialization on ConPTY.
+    const safeSideRows = [0, 11, 13, 15, 17, 18].filter((r) => r < safeHeight);
+    if (safeSideRows.length === 0) return base;
+    return base.map((star, idx) => ({
+      ...star,
+      y: safeSideRows[idx % safeSideRows.length],
+      vy: 0
+    }));
+  }, [safeWidth, safeHeight, maxStarsForBand, seedOffset, isSideBand]);
 
-  const activeTick = externalTick !== undefined ? externalTick : internalTick;
+  const activeTick = !animationsEnabled
+    ? 0
+    : externalTick !== undefined
+      ? externalTick
+      : internalTick;
 
   const { stars, shootingStar } = useMemo(
     () =>
@@ -401,3 +428,5 @@ export const Starfield: React.FC<StarfieldProps> = ({
     </Box>
   );
 };
+
+export const Starfield: React.FC<StarfieldProps> = React.memo(StarfieldInner);

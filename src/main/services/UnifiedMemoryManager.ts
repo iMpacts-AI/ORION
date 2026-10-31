@@ -1,5 +1,6 @@
 import { MemoryLayerType, MemoryRecord, IUnifiedMemoryManager } from '../../shared/types/memoryManager';
 import { eventBus } from '../../shared/events';
+import { classifyConversationalTurn } from '../../shared/branding/OrionEngineIdentity';
 import fs from 'fs';
 import path from 'path';
 
@@ -294,13 +295,22 @@ export class UnifiedMemoryManager implements IUnifiedMemoryManager {
 
   public queryMemories(query: string, limit = 5): MemoryRecord[] {
     const lower = query.toLowerCase().trim();
-    if (!lower) return [];
+    if (!lower || classifyConversationalTurn(query).isGreetingOrSmallTalk) {
+      return [];
+    }
 
-    // 1. Direct substring or tag match (preserves exact phrase lookup)
-    const directMatches = this.memories.filter(m =>
-      !UnifiedMemoryManager.isPromptInjectionAttempt(m.content) &&
-      (m.content.toLowerCase().includes(lower) || m.tags.some(t => t.toLowerCase().includes(lower)))
-    );
+    // 1. Direct substring or tag match (require word boundary for short <4 char queries so "hi" never matches "this")
+    const shortWordBoundary =
+      lower.length < 4
+        ? new RegExp(`\\b${lower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+        : null;
+    const directMatches = this.memories.filter(m => {
+      if (UnifiedMemoryManager.isPromptInjectionAttempt(m.content)) return false;
+      if (shortWordBoundary) {
+        return shortWordBoundary.test(m.content) || m.tags.some(t => shortWordBoundary.test(t));
+      }
+      return m.content.toLowerCase().includes(lower) || m.tags.some(t => t.toLowerCase().includes(lower));
+    });
 
     if (directMatches.length >= limit) {
       return directMatches.slice(-limit);

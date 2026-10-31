@@ -27,6 +27,14 @@ export type OrisTaskLifecycleState =
   | 'cancelled'
   | 'error';
 
+export type OrisClickStage =
+  | 'anticipation'
+  | 'ascent'
+  | 'apex'
+  | 'descent'
+  | 'landing'
+  | 'idle';
+
 export interface OrisMascotState {
   x: number;
   y: number;
@@ -38,6 +46,9 @@ export interface OrisMascotState {
   clickCount: number;
   lastClickTimestamp: number;
   statusCaption?: string;
+  clickStage?: OrisClickStage;
+  breathingPhase?: 0 | 1;
+  isDancing?: boolean;
 }
 
 export interface SgrMouseEvent {
@@ -90,17 +101,24 @@ let cachedDiskSpriteGrid: ReadonlyArray<ReadonlyArray<string | null>> | null = n
 
 function loadCanonicalOrisPixelGrid(): ReadonlyArray<ReadonlyArray<string | null>> {
   if (cachedDiskSpriteGrid) return cachedDiskSpriteGrid;
-  try {
-    const candidate = path.resolve(__dirname, '..', '..', 'assets', 'mascot', 'oris-sprite.json');
-    if (fs.existsSync(candidate)) {
-      const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8'));
-      if (Array.isArray(parsed?.pixels) && parsed.pixels.length === 18) {
-        cachedDiskSpriteGrid = parsed.pixels;
-        return cachedDiskSpriteGrid!;
+  const candidates = [
+    path.resolve(__dirname, '..', '..', 'assets', 'mascot', 'oris-sprite.json'),
+    ...(process.env.ORION_INSTALL_ROOT
+      ? [path.resolve(process.env.ORION_INSTALL_ROOT, 'assets', 'mascot', 'oris-sprite.json')]
+      : [])
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8'));
+        if (Array.isArray(parsed?.pixels) && parsed.pixels.length === 18) {
+          cachedDiskSpriteGrid = parsed.pixels;
+          return cachedDiskSpriteGrid!;
+        }
       }
+    } catch {
+      // Try next candidate or fall back to embedded canonical 18x18 pixel grid
     }
-  } catch {
-    // Fall back to embedded canonical 18x18 pixel grid
   }
   cachedDiskSpriteGrid = ORIS_CANONICAL_PIXEL_GRID_18X18;
   return cachedDiskSpriteGrid;
@@ -275,12 +293,16 @@ export class OrisMascotController {
   private readonly multiClickWindowMs: number;
   private readonly fallenDurationMs: number;
   private readonly jumpDurationMs: number;
+  private readonly useReadableClickArc: boolean;
 
   private elapsedMs = 0;
   private nextBlinkAtMs = 2600;
   private blinkEndAtMs = 0;
   private nextHopAtMs = 6400;
   private hopPhaseEndAtMs = 0;
+  private nextDanceAtMs = 11_400;
+  private danceStartedAtMs = 0;
+  private danceDurationMs = 960;
   private jumpStartedAtMs = 0;
   private fallenStartedAtMs = 0;
   private lastPointerMoveAtMs = 0;
@@ -289,7 +311,8 @@ export class OrisMascotController {
     this.multiClickThreshold = config.multiClickThresholdCount ?? 3;
     this.multiClickWindowMs = config.multiClickWindowMs ?? 900;
     this.fallenDurationMs = config.fallenDurationMs ?? 400;
-    this.jumpDurationMs = config.jumpDurationMs ?? 420;
+    this.jumpDurationMs = config.jumpDurationMs ?? 960;
+    this.useReadableClickArc = this.jumpDurationMs > 450;
 
     this.state = {
       x: 0,
@@ -300,7 +323,10 @@ export class OrisMascotController {
       blinkLong: false,
       particles: [],
       clickCount: 0,
-      lastClickTimestamp: 0
+      lastClickTimestamp: 0,
+      clickStage: 'idle',
+      breathingPhase: 0,
+      isDancing: false
     };
   }
 
@@ -358,6 +384,8 @@ export class OrisMascotController {
 
       if (updatedClickCount >= this.multiClickThreshold) {
         this.state.actionState = 'fallen';
+        this.state.clickStage = 'idle';
+        this.state.isDancing = false;
         this.fallenStartedAtMs = this.elapsedMs;
         this.state.y = 1;
         this.state.tiltDirection = updatedClickCount % 2 === 0 ? 1 : -1;
@@ -367,8 +395,23 @@ export class OrisMascotController {
           { glyph: '✧', dx: 0, dy: -2 }
         ];
         this.state.clickCount = 0;
+      } else if (this.useReadableClickArc) {
+        // 6-Stage Readable Eased Click Arc (~1,140ms total including soft landing):
+        // Stage 1: Subtle anticipation crouch/sparkle before gentle ascent
+        this.state.actionState = 'jumping';
+        this.state.clickStage = 'anticipation';
+        this.state.isDancing = false;
+        this.jumpStartedAtMs = this.elapsedMs;
+        this.state.y = 0;
+        this.state.tiltDirection = 0;
+        this.state.particles = [
+          { glyph: '✦', dx: -2, dy: 0 },
+          { glyph: '✧', dx: 2, dy: 0 }
+        ];
       } else {
         this.state.actionState = 'jumping';
+        this.state.clickStage = 'apex';
+        this.state.isDancing = false;
         this.jumpStartedAtMs = this.elapsedMs;
         this.state.y = -3;
         this.state.particles = [
@@ -431,16 +474,69 @@ export class OrisMascotController {
 
     if (this.state.actionState === 'jumping') {
       const jumpElapsed = this.elapsedMs - this.jumpStartedAtMs;
+      if (this.useReadableClickArc) {
+        const progress = jumpElapsed / Math.max(1, this.jumpDurationMs);
+        if (progress >= 1) {
+          // Stage 5: Soft landing
+          this.state.actionState = 'landing';
+          this.state.clickStage = 'landing';
+          this.hopPhaseEndAtMs = this.elapsedMs + 180;
+          this.state.y = 0;
+          this.state.particles = [
+            { glyph: '✧', dx: -1, dy: 0 },
+            { glyph: '✦', dx: 1, dy: 0 }
+          ];
+        } else if (progress < 0.14) {
+          // Stage 1: Subtle anticipation
+          this.state.clickStage = 'anticipation';
+          this.state.y = 0;
+          this.state.particles = [
+            { glyph: '✦', dx: -2, dy: 0 },
+            { glyph: '✧', dx: 2, dy: 0 }
+          ];
+        } else if (progress < 0.38) {
+          // Stage 2: Gentle jump ascent (ease-out)
+          this.state.clickStage = 'ascent';
+          this.state.y = progress < 0.25 ? -1 : -2;
+          this.state.particles = [
+            { glyph: '✦', dx: -2, dy: -1 },
+            { glyph: '✧', dx: 2, dy: -1 }
+          ];
+        } else if (progress < 0.70) {
+          // Stage 3: Visible airborne pause at apex
+          this.state.clickStage = 'apex';
+          this.state.y = -3;
+          this.state.particles = [
+            { glyph: '✦', dx: -2, dy: -2 },
+            { glyph: '✧', dx: 2, dy: -2 },
+            { glyph: '✦', dx: 0, dy: -3 }
+          ];
+        } else {
+          // Stage 4: Smooth eased descent
+          this.state.clickStage = 'descent';
+          this.state.y = progress < 0.85 ? -2 : -1;
+          this.state.particles = [
+            { glyph: '✧', dx: -1, dy: -1 },
+            { glyph: '✦', dx: 1, dy: -1 }
+          ];
+        }
+        return this.getState();
+      }
+
       if (jumpElapsed >= this.jumpDurationMs) {
         this.state.actionState = 'landing';
+        this.state.clickStage = 'landing';
         this.hopPhaseEndAtMs = this.elapsedMs + 140;
         this.state.y = 0;
         this.state.particles = [{ glyph: '✧', dx: -1, dy: 0 }, { glyph: '✦', dx: 1, dy: 0 }];
       } else if (jumpElapsed < this.jumpDurationMs * 0.45) {
+        this.state.clickStage = 'apex';
         this.state.y = -3;
       } else if (jumpElapsed < this.jumpDurationMs * 0.8) {
+        this.state.clickStage = 'descent';
         this.state.y = -2;
       } else {
+        this.state.clickStage = 'descent';
         this.state.y = -1;
       }
       return this.getState();
@@ -448,8 +544,11 @@ export class OrisMascotController {
 
     if (this.state.actionState === 'landing') {
       if (this.elapsedMs >= this.hopPhaseEndAtMs) {
+        // Stage 6: Return cleanly to calm idle
         this.state.actionState = this.taskLifecycle === 'idle' ? 'idle' : this.taskLifecycle;
+        this.state.clickStage = 'idle';
         this.state.y = 0;
+        this.state.tiltDirection = 0;
         this.state.particles = [];
       }
       return this.getState();
@@ -487,13 +586,40 @@ export class OrisMascotController {
       return this.getState();
     }
 
+    // Calm time-based idle breathing cycle (2.4s inhale / 2.4s exhale, zero rapid jitter)
+    this.state.breathingPhase = (Math.floor(this.elapsedMs / 2400) % 2) as 0 | 1;
+
+    // Occasional gentle 3-beat idle dance (~960ms every ~12-16s)
+    if (this.state.isDancing) {
+      const danceElapsed = this.elapsedMs - this.danceStartedAtMs;
+      if (danceElapsed >= this.danceDurationMs) {
+        this.state.isDancing = false;
+        this.state.tiltDirection = 0;
+        this.state.x = 0;
+        this.state.y = 0;
+        this.state.particles = [];
+        this.nextDanceAtMs = this.elapsedMs + 12_800 + (Math.floor(this.elapsedMs) % 3200);
+      } else {
+        const beat = Math.floor((danceElapsed / this.danceDurationMs) * 3);
+        const dir: -1 | 0 | 1 = beat === 0 ? -1 : beat === 1 ? 1 : 0;
+        this.state.tiltDirection = dir;
+        this.state.x = dir;
+        this.state.y = beat === 1 ? -1 : 0;
+        this.state.particles = [
+          { glyph: '✧', dx: -2, dy: -1 },
+          { glyph: '✦', dx: 2, dy: -1 }
+        ];
+        return this.getState();
+      }
+    }
+
     if (this.state.actionState === 'blinking') {
       if (this.elapsedMs >= this.blinkEndAtMs) {
         if (this.elapsedMs >= this.nextHopAtMs) {
           this.state.actionState = 'hopping';
           this.state.y = -1;
-          this.hopPhaseEndAtMs = this.elapsedMs + 220;
-          this.nextHopAtMs = this.elapsedMs + 5800 + (Math.floor(this.elapsedMs) % 2200);
+          this.hopPhaseEndAtMs = this.elapsedMs + 260;
+          this.nextHopAtMs = this.elapsedMs + 6200 + (Math.floor(this.elapsedMs) % 2200);
           this.state.particles = [{ glyph: '✧', dx: 0, dy: -1 }];
         } else {
           this.state.actionState = 'idle';
@@ -507,7 +633,7 @@ export class OrisMascotController {
       if (this.elapsedMs >= this.hopPhaseEndAtMs) {
         this.state.actionState = 'landing';
         this.state.y = 0;
-        this.hopPhaseEndAtMs = this.elapsedMs + 140;
+        this.hopPhaseEndAtMs = this.elapsedMs + 160;
       }
       return this.getState();
     }
@@ -518,14 +644,23 @@ export class OrisMascotController {
       this.state.actionState = 'blinking';
       const isLong = Math.floor(this.elapsedMs / 1000) % 4 === 0;
       this.state.blinkLong = isLong;
-      this.blinkEndAtMs = this.elapsedMs + (isLong ? 340 : 160);
-      this.nextBlinkAtMs = this.elapsedMs + 2400 + (Math.floor(this.elapsedMs) % 1800);
+      this.blinkEndAtMs = this.elapsedMs + (isLong ? 340 : 180);
+      this.nextBlinkAtMs = this.elapsedMs + 2800 + (Math.floor(this.elapsedMs) % 1800);
     } else if (this.elapsedMs >= this.nextHopAtMs) {
       this.state.actionState = 'hopping';
       this.state.y = -1;
-      this.hopPhaseEndAtMs = this.elapsedMs + 220;
-      this.nextHopAtMs = this.elapsedMs + 6200;
+      this.hopPhaseEndAtMs = this.elapsedMs + 260;
+      this.nextHopAtMs = this.elapsedMs + 6600;
       this.state.particles = [{ glyph: '✧', dx: 1, dy: -1 }];
+    } else if (this.elapsedMs >= this.nextDanceAtMs) {
+      this.state.isDancing = true;
+      this.danceStartedAtMs = this.elapsedMs;
+      this.state.tiltDirection = -1;
+      this.state.x = -1;
+      this.state.particles = [
+        { glyph: '✧', dx: -2, dy: -1 },
+        { glyph: '✦', dx: 2, dy: -1 }
+      ];
     }
 
     return this.getState();
@@ -544,22 +679,33 @@ function isLuminousOrisFeature(hex: string | null): boolean {
   return Math.max(r, g, b) >= 110;
 }
 
+const ORIS_HALF_BLOCK_RENDER_CACHE = new Map<string, readonly string[]>();
+const MAX_ORIS_RENDER_CACHE_ENTRIES = 96;
+
 /**
  * Renders the canonical 18x18 Gemini pixel-art Oris sprite into 9 rows of 24-bit ANSI
  * half-block characters (`▀` / `▄` / `█` / ` `) with genuine terminal background transparency (`\x1b[49m`),
  * fixed 20-column cell width, <=19-byte CSI SGR tokens (safe for Ink's `@alcalzone/ansi-tokenize`),
- * and faithful pixel-level eye animations across all 13 `OrisActionState`s.
+ * memoized O(1) lookup for unchanged visual states, and faithful pixel-level eye animations across all 13 `OrisActionState`s.
  */
 export function renderOrisPixelHalfBlockLines(
   state: OrisMascotState,
   options?: { cardBgHex?: string; opaqueBg?: boolean; noColor?: boolean }
 ): string[] {
-  const baseGrid = loadCanonicalOrisPixelGrid();
-  const grid: Array<Array<string | null>> = baseGrid.map((r) => [...r]);
-  const darkFaceHex = '#011948';
   const useOpaqueBg = Boolean(options?.opaqueBg && options?.cardBgHex);
   const opaqueBgHex = options?.cardBgHex || '#070d19';
   const noColor = Boolean(options?.noColor);
+  const breathingPhase = state.breathingPhase ?? 0;
+
+  const cacheKey = `${state.actionState}|${state.eyeOffsetX}|${state.tiltDirection}|${state.blinkLong ? 1 : 0}|${breathingPhase}|${useOpaqueBg ? opaqueBgHex : 'transparent'}|${noColor ? 1 : 0}`;
+  const cached = ORIS_HALF_BLOCK_RENDER_CACHE.get(cacheKey);
+  if (cached) {
+    return [...cached];
+  }
+
+  const baseGrid = loadCanonicalOrisPixelGrid();
+  const grid: Array<Array<string | null>> = baseGrid.map((r) => [...r]);
+  const darkFaceHex = '#011948';
 
   // Clear canonical eye columns (rows 6..9, cols 8 and 13) before drawing animated eyes
   for (let r = 6; r <= 9; r++) {
@@ -614,12 +760,12 @@ export function renderOrisPixelHalfBlockLines(
       break;
     }
     default: {
-      // Canonical 1x3 luminous cyan-white vertical bar eyes (with subtle top glow pixel at row 6)
-      grid[6][leftEyeCol] = '#3f81a7';
+      // Canonical 1x3 luminous cyan-white vertical bar eyes (with calm idle breathing glow pixel at row 6)
+      grid[6][leftEyeCol] = breathingPhase === 1 ? '#5bc0eb' : '#3f81a7';
       grid[7][leftEyeCol] = '#95fbfd';
       grid[8][leftEyeCol] = '#95f8fd';
       grid[9][leftEyeCol] = '#95f6fc';
-      grid[6][rightEyeCol] = '#3f7fa3';
+      grid[6][rightEyeCol] = breathingPhase === 1 ? '#5bc0eb' : '#3f7fa3';
       grid[7][rightEyeCol] = '#95f9fe';
       grid[8][rightEyeCol] = '#a1fdfe';
       grid[9][rightEyeCol] = '#a5fefe';
@@ -680,6 +826,14 @@ export function renderOrisPixelHalfBlockLines(
     ansiLine += `${defaultBgReset}${shiftSuffix}\x1b[0m`;
     lines.push(ansiLine);
   }
+
+  if (ORIS_HALF_BLOCK_RENDER_CACHE.size >= MAX_ORIS_RENDER_CACHE_ENTRIES) {
+    const firstKey = ORIS_HALF_BLOCK_RENDER_CACHE.keys().next().value;
+    if (firstKey !== undefined) {
+      ORIS_HALF_BLOCK_RENDER_CACHE.delete(firstKey);
+    }
+  }
+  ORIS_HALF_BLOCK_RENDER_CACHE.set(cacheKey, Object.freeze([...lines]));
 
   return lines;
 }
@@ -830,6 +984,7 @@ export interface MascotInteractiveProps {
   columns: number;
   rows: number;
   vividMode: boolean;
+  animationsEnabled?: boolean;
   noColor?: boolean;
   taskLifecycle?: OrisTaskLifecycleState;
   statusCaption?: string;
@@ -841,10 +996,11 @@ export interface MascotInteractiveProps {
   parentDriven?: boolean;
 }
 
-export const MascotInteractive: React.FC<MascotInteractiveProps> = ({
+const MascotInteractiveInner: React.FC<MascotInteractiveProps> = ({
   ink,
   columns,
   vividMode,
+  animationsEnabled = true,
   noColor = false,
   taskLifecycle = 'idle',
   statusCaption,
@@ -886,7 +1042,7 @@ export const MascotInteractive: React.FC<MascotInteractiveProps> = ({
   const lastSteppedTickRef = useRef<number>(externalTick);
   if (!parentDriven && lastSteppedTickRef.current !== externalTick) {
     lastSteppedTickRef.current = externalTick;
-    if (vividMode || taskLifecycle !== 'idle') {
+    if (animationsEnabled && (vividMode || taskLifecycle !== 'idle')) {
       controller.step(deltaMs);
     }
   }
@@ -901,13 +1057,15 @@ export const MascotInteractive: React.FC<MascotInteractiveProps> = ({
   const isJumpingUp = mascotState.y < 0;
 
   const particleBanner =
-    vividMode && mascotState.particles.length > 0
+    animationsEnabled && vividMode && mascotState.particles.length > 0
       ? mascotState.particles.map((p) => p.glyph).join('   ')
       : '';
 
   const stageWidth = Math.min(Math.max(22, columns - 4), 72);
+  const danceBadge = mascotState.isDancing ? 'ORIS • COSMIC SWAY ✧' : '';
   const rawCaption =
     mascotState.statusCaption ||
+    danceBadge ||
     (mascotState.actionState !== 'idle' && mascotState.actionState !== 'blinking'
       ? badgeText
       : '');
@@ -937,3 +1095,7 @@ export const MascotInteractive: React.FC<MascotInteractiveProps> = ({
     </Box>
   );
 };
+
+export const MascotInteractive: React.FC<MascotInteractiveProps> = React.memo(
+  MascotInteractiveInner
+);

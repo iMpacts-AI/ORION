@@ -56,6 +56,9 @@ export interface BrowserNavigateOptions {
   visibleWindow?: boolean;
   executableOverride?: string;
   profileDirectory?: string;
+  pauseOnAuthOrCaptcha?: boolean;
+  searchEngineUrl?: string;
+  signal?: AbortSignal;
 }
 
 export interface BrowserInteractionOptions {

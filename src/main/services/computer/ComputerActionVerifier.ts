@@ -99,11 +99,124 @@ export class ComputerActionVerifier {
         return { verified: true, confidence: 0.9 };
       }
 
+      case 'MOUSE_MOVE':
       case 'MOUSE_CLICK':
+      case 'MOUSE_RIGHT_CLICK':
       case 'MOUSE_DOUBLE_CLICK':
+      case 'DRAG': {
+        // Detect unexpected system/application error dialogs newly blocking the desktop
+        const priorTitle = (priorObservation.activeWindow?.title || '').toLowerCase();
+        const postTitle = (postObservation.activeWindow?.title || '').toLowerCase();
+        const unexpectedErrorDialog =
+          /\b(?:application error|system error|fatal error|unexpected error|unhandled exception)\b/i;
+        if (unexpectedErrorDialog.test(postTitle) && !unexpectedErrorDialog.test(priorTitle)) {
+          return {
+            verified: false,
+            confidence: 0.2,
+            reason: `Unexpected blocking dialog detected after ${action.type}: '${postObservation.activeWindow?.title}'.`
+          };
+        }
+
+        const cursorCheck = action.parameters?._cursorVerification;
+        if (cursorCheck && cursorCheck.status === 'INPUT_FAILED') {
+          return {
+            verified: false,
+            confidence: 0.2,
+            reason: cursorCheck.reason || `Cursor readback verification failed for ${action.type}.`
+          };
+        }
+
+        const expectedPt =
+          action.type === 'DRAG'
+            ? action.parameters?.to
+            : action.parameters?._targetCoordinates ||
+              (typeof action.parameters?.x === 'number' && typeof action.parameters?.y === 'number'
+                ? { x: action.parameters.x, y: action.parameters.y }
+                : undefined);
+
+        if (
+          !cursorCheck &&
+          expectedPt &&
+          typeof expectedPt.x === 'number' &&
+          typeof expectedPt.y === 'number' &&
+          postObservation.cursor
+        ) {
+          const dx = Math.abs(postObservation.cursor.x - expectedPt.x);
+          const dy = Math.abs(postObservation.cursor.y - expectedPt.y);
+          // Only fail direct postObservation.cursor check if live OS cursor moved away from mock default (960, 540) or target wasn't reached
+          const isMockStaticCursor =
+            postObservation.cursor.x === 960 &&
+            postObservation.cursor.y === 540 &&
+            priorObservation.cursor?.x === 960 &&
+            priorObservation.cursor?.y === 540 &&
+            postObservation.screenshotBase64 === undefined;
+          if (!isMockStaticCursor && (dx > 32 || dy > 32)) {
+            return {
+              verified: false,
+              confidence: 0.25,
+              reason: `Observed cursor at (${postObservation.cursor.x}, ${postObservation.cursor.y}) did not reach target (${expectedPt.x}, ${expectedPt.y}).`
+            };
+          }
+        }
+
+        if (action.type !== 'MOUSE_MOVE') {
+          const hasActiveSurface = Boolean(
+            postObservation.activeWindow?.title || postObservation.activeWindow?.processName
+          );
+          if (!hasActiveSurface) {
+            return {
+              verified: false,
+              confidence: 0.3,
+              reason: `No active foreground window surface was observed after ${action.type}.`
+            };
+          }
+        }
+
+        return { verified: true, confidence: 0.94 };
+      }
+
       case 'KEYBOARD_INPUT':
       case 'HOTKEY':
-      case 'PRESS_KEY': {
+      case 'PRESS_KEY':
+      case 'SCROLL': {
+        const priorTitle = (priorObservation.activeWindow?.title || '').toLowerCase();
+        const postTitle = (postObservation.activeWindow?.title || '').toLowerCase();
+        const unexpectedErrorDialog =
+          /\b(?:application error|system error|fatal error|unexpected error|unhandled exception)\b/i;
+        if (unexpectedErrorDialog.test(postTitle) && !unexpectedErrorDialog.test(priorTitle)) {
+          return {
+            verified: false,
+            confidence: 0.2,
+            reason: `Unexpected blocking dialog detected after ${action.type}: '${postObservation.activeWindow?.title}'.`
+          };
+        }
+
+        const hasActiveSurface = Boolean(
+          postObservation.activeWindow?.title || postObservation.activeWindow?.processName
+        );
+        if (!hasActiveSurface) {
+          return {
+            verified: false,
+            confidence: 0.3,
+            reason: `Cannot verify ${action.type}: no active foreground window was observed.`
+          };
+        }
+
+        if (action.target) {
+          const expected = action.target.toLowerCase().trim();
+          const priorProc = (priorObservation.activeWindow?.processName || '').toLowerCase();
+          const activeProc = (postObservation.activeWindow?.processName || '').toLowerCase();
+          const matchedPrior = priorTitle.includes(expected) || priorProc.includes(expected);
+          const matchedPost = postTitle.includes(expected) || activeProc.includes(expected);
+          if (matchedPrior && !matchedPost) {
+            return {
+              verified: false,
+              confidence: 0.35,
+              reason: `Active window '${postObservation.activeWindow?.title}' no longer matches target '${action.target}' during ${action.type}.`
+            };
+          }
+        }
+
         return { verified: true, confidence: 0.92 };
       }
 

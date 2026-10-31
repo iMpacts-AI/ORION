@@ -17,6 +17,12 @@ import { ComputerActionService } from './ComputerActionService';
 import { Observation } from '../../shared/types';
 import { AgentStateMachine } from './AgentStateMachine';
 import { TaskMemoryService, AgentTask } from './TaskMemoryService';
+import {
+  classifyConversationalTurn,
+  isExplicitPathInspectionQuery,
+  sanitizeConversationalResponse,
+  sanitizePersonalPathsInText
+} from '../../shared/branding/OrionEngineIdentity';
 
 export interface ProcessCommandResult {
   query: string;
@@ -208,9 +214,16 @@ export class OrionOrchestrator {
     // Record User Turn in Memory
     this.memoryService.addTurn({ role: 'user', content: query });
 
-    // Capture Initial Environment State Snapshot
-    const initialEnv = await this.perceptionService.captureEnvironment(this.getState());
-    eventBus.logActivity('PROCESSING', `Environment State: Active App "${initialEnv.activeApp}" | Window "${initialEnv.activeWindow?.title}"`);
+    const turnClassification = classifyConversationalTurn(query);
+
+    // Capture Initial Environment State Snapshot (skip expensive window enumeration on pure greetings/small talk)
+    if (!turnClassification.isGreetingOrSmallTalk) {
+      const initialEnv = await this.perceptionService.captureEnvironment(this.getState());
+      eventBus.logActivity(
+        'PROCESSING',
+        `Environment State: Active App "${initialEnv.activeApp}" | Window "${initialEnv.activeWindow?.title}"`
+      );
+    }
 
     // Register Active Background Task Record in TaskSupervisor
     const activeTaskRecord = this.taskSupervisor.createTask(`Execute: ${query.slice(0, 30)}...`, query, 'HIGH');
@@ -233,7 +246,9 @@ export class OrionOrchestrator {
 
         // Step 1: Intent Classification
         const startIntentTime = Date.now();
-        const intentResult = await this.aiProvider.classifyIntent(query);
+        const intentResult = turnClassification.isGreetingOrSmallTalk
+          ? { intent: 'CONVERSATION' as const, confidence: 0.99 }
+          : await this.aiProvider.classifyIntent(query);
         metrics.intentClassificationLatencyMs = Date.now() - startIntentTime;
 
         const isVisionIntent = intentResult.intent === 'VISION' ||
@@ -261,19 +276,70 @@ export class OrionOrchestrator {
             options.onToken(responseText);
           }
         } else {
-          // Navigation Mode Triggers
-          if (lower.includes('system') || lower.includes('show system')) suggestedMode = 'SYSTEM';
-          else if (lower.includes('vision') || lower.includes('activate vision')) suggestedMode = 'VISION';
-          else if (lower.includes('computer') || lower.includes('show my computer')) suggestedMode = 'COMPUTER';
-          else if (lower.includes('world') || lower.includes('world overview')) suggestedMode = 'WORLD';
-          else if (lower.includes('memory') || lower.includes('show memory')) suggestedMode = 'MEMORY';
+          // Navigation Mode Triggers (only when not a greeting/small talk)
+          if (!turnClassification.isGreetingOrSmallTalk) {
+            if (turnClassification.isExplicitSystemSpecRequest || lower.includes('show system')) suggestedMode = 'SYSTEM';
+            else if (lower.includes('vision') || lower.includes('activate vision')) suggestedMode = 'VISION';
+            else if (lower.includes('show my computer')) suggestedMode = 'COMPUTER';
+            else if (lower.includes('world overview')) suggestedMode = 'WORLD';
+            else if (lower.includes('show memory')) suggestedMode = 'MEMORY';
+          }
 
           // Step 2: Planning Stage with Intelligent Tool Capability Resolution
           const startPlanTime = Date.now();
+          const isAmbiguousTargetlessEdit =
+            /^\s*(?:please\s+)?(?:can\s+you\s+|could\s+you\s+)?(?:update|edit|modify|change|fix|rewrite)\s+(?:the|a|my|this|that)\s+(?:file|config|configuration|document|script)(?:\s+for\s+me)?[.!?]?\s*$/i.test(
+              query.trim()
+            );
+
+          if (isAmbiguousTargetlessEdit) {
+            responseText =
+              'Which file would you like me to update, and what specific changes should I make?';
+            if (options?.onToken) {
+              options.onToken(responseText);
+            }
+            metrics.planningLatencyMs = Date.now() - startPlanTime;
+            this.traceService.recordPlan(activeTrace.traceId, {
+              goal: `Clarify ambiguous request: "${query}"`,
+              steps: []
+            });
+          } else {
           const allTools = this.toolService.getTools();
-          const resolvedTools = this.capabilityResolver.resolveToolsForTask(query, allTools);
+          const skipToolsForPureChat =
+            turnClassification.isGreetingOrSmallTalk ||
+            (turnClassification.isPureConversational &&
+              !turnClassification.isExplicitFileRequest &&
+              !turnClassification.isExplicitSystemSpecRequest);
+          const resolvedTools = skipToolsForPureChat
+            ? []
+            : this.capabilityResolver.resolveToolsForTask(query, allTools);
           const availableToolIds = resolvedTools.map(t => t.id);
-          const plan = await this.aiProvider.plan(query, availableToolIds);
+          const plan = skipToolsForPureChat
+            ? { goal: `Conversation: "${query}"`, steps: [] }
+            : await this.aiProvider.plan(query, availableToolIds);
+
+          if (
+            turnClassification.isExplicitSystemSpecRequest &&
+            plan.steps.length === 0 &&
+            !/\b(?:what\s+time|current\s+time|date\s+today)\b/i.test(query)
+          ) {
+            plan.steps = [
+              {
+                stepNumber: 1,
+                actionDescription: 'Retrieve workstation OS and CPU specifications',
+                toolToCall: 'system.get_info',
+                toolArguments: {},
+                isReadOnly: true
+              },
+              {
+                stepNumber: 2,
+                actionDescription: 'Retrieve workstation memory capacity and utilization',
+                toolToCall: 'system.get_memory_usage',
+                toolArguments: {},
+                isReadOnly: true
+              }
+            ];
+          }
           metrics.planningLatencyMs = Date.now() - startPlanTime;
           this.traceService.recordPlan(activeTrace.traceId, plan);
 
@@ -464,10 +530,23 @@ export class OrionOrchestrator {
           // Step 4: Synthesize Final Response using ContextBuilder, Relevant Persisted Memories, & Structured Observations
           const startAiGen = Date.now();
           const historyTurns = this.memoryService.getTurns();
+          const sanitizedFormattedHistory = this.memoryService
+            .getFormattedHistory()
+            .map(t => ({
+              role: t.role,
+              content: sanitizeConversationalResponse(t.content, {
+                workspaceRoot: process.cwd(),
+                redactProviderIds: true
+              })
+            }))
+            .filter(t => t.content.length > 0);
           const unifiedMemory = typeof (this.toolService as any).getUnifiedMemory === 'function'
             ? (this.toolService as any).getUnifiedMemory()
             : undefined;
-          const relevantMemories = unifiedMemory ? unifiedMemory.queryMemories(query, 5) : [];
+          const relevantMemories =
+            !turnClassification.isGreetingOrSmallTalk && unifiedMemory
+              ? unifiedMemory.queryMemories(query, 5)
+              : [];
 
           const observations: Observation[] = results.map(r => {
             const obs: Observation = {
@@ -500,7 +579,7 @@ export class OrionOrchestrator {
               try {
                 responseText = await this.generateResponseWithOptionalStreaming(
                   synthesisPrompt,
-                  this.memoryService.getFormattedHistory(),
+                  sanitizedFormattedHistory,
                   options,
                   metrics
                 );
@@ -508,7 +587,10 @@ export class OrionOrchestrator {
                 if (options?.signal?.aborted || /abort|cancel/i.test(e?.message || '')) {
                   throw e;
                 }
-                responseText = `[ORION INTEL] ${JSON.stringify(results[0].data, null, 2)}`;
+                responseText = sanitizePersonalPathsInText(
+                  `[ORION INTEL] ${JSON.stringify(results[0].data, null, 2)}`,
+                  process.cwd()
+                );
                 if (options?.onToken) options.onToken(responseText);
               }
 
@@ -538,18 +620,25 @@ export class OrionOrchestrator {
               commandFailed = true;
               responseText = `UNSUPPORTED CAPABILITY: ORION does not have a verified native tool for ${unsupported.capability} (${unsupported.reason}). No system mutation or external action was executed. Use /tools to inspect the registered authoritative tools.`;
             } else {
-              const promptWithMemory = relevantMemories.length > 0
-                ? this.contextBuilder.buildSynthesisContext(query, historyTurns, [], this.taskMemory.getCurrentTask(), relevantMemories)
-                : query;
+              const promptWithMemory =
+                !turnClassification.isGreetingOrSmallTalk && relevantMemories.length > 0
+                  ? this.contextBuilder.buildSynthesisContext(query, historyTurns, [], this.taskMemory.getCurrentTask(), relevantMemories)
+                  : query;
               responseText = await this.generateResponseWithOptionalStreaming(
                 promptWithMemory,
-                this.memoryService.getFormattedHistory(),
+                sanitizedFormattedHistory,
                 options,
                 metrics
               );
             }
           }
+          responseText = sanitizeConversationalResponse(responseText, {
+            workspaceRoot: process.cwd(),
+            redactProviderIds: true,
+            preserveExplicitPaths: isExplicitPathInspectionQuery(query)
+          });
           metrics.aiTotalGenerationLatencyMs = Date.now() - startAiGen;
+          }
         }
 
         // Step 5: Record Assistant Response in Memory, Mark Task Completed, & Trigger TTS Speech (VOICE only)
@@ -584,9 +673,10 @@ export class OrionOrchestrator {
         responseText = 'Task cancelled.';
       } else {
         this.updateState('ERROR');
-        this.taskSupervisor.handleTaskFailure(activeTaskRecord.taskId, err.message || 'Execution error');
+        const safeErrMessage = sanitizePersonalPathsInText(err.message || 'Execution error', process.cwd());
+        this.taskSupervisor.handleTaskFailure(activeTaskRecord.taskId, safeErrMessage);
         eventBus.logActivity('ERROR_EVENT', `Orchestrator failure: ${err.message}`);
-        responseText = `ORION Error: ${err.message}`;
+        responseText = `ORION Error: ${safeErrMessage}`;
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     } finally {

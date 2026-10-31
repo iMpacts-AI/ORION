@@ -8,6 +8,11 @@ import {
   TrackedAppState,
   AppRuntimeStatus
 } from './OrionActiveAppsTracker';
+import {
+  resolvePublicEngineIdentity,
+  sanitizeConversationalResponse,
+  sanitizePersonalPathsInText
+} from '../shared/branding/OrionEngineIdentity';
 
 function redactSecrets(text: string): string {
   return String(ExecutionTraceService.redactSensitiveValue(text) ?? '');
@@ -200,7 +205,7 @@ export class OrionCliRenderer {
   public sanitize(raw: unknown): string {
     const str = typeof raw === 'string' ? raw : JSON.stringify(raw ?? '');
     const redacted = redactSecrets(str);
-    return stripTerminalControlSequences(redacted);
+    return sanitizePersonalPathsInText(stripTerminalControlSequences(redacted));
   }
 
   public stripAnsi(text: string): string {
@@ -311,6 +316,7 @@ export class OrionCliRenderer {
     mcpConnectedCount?: number;
     mcpConfiguredCount?: number;
     localApiPort?: number | null;
+    developerDiagnostics?: boolean;
   }): void {
     if (this.jsonMode) return;
     this.updateTerminalWidth();
@@ -321,7 +327,9 @@ export class OrionCliRenderer {
       : info.policyVerified === false
         ? this.red('TAMPER_DETECTED')
         : this.green(`4-Tier Protected (${info.permissionCeiling || 'MEDIUM'})`);
-    const modelStr = `${info.activeProvider}:${info.activeModel}`;
+    const modelStr = info.developerDiagnostics
+      ? `${info.activeProvider}:${info.activeModel}`
+      : resolvePublicEngineIdentity(info.activeProvider, info.activeModel).publicLabel;
 
     // Refresh Active Applications state from fast cached OS window snapshot
     this.appsTracker.refreshFromSystem(false);
@@ -331,7 +339,7 @@ export class OrionCliRenderer {
         `${this.formatOrionLogo()} ${this.dim(`v${info.version} · Sovereign AI Operating Layer`)}`
       );
       this.writeLine(
-        `${this.dim('Model:')} ${this.cyan(modelStr)} ${this.dim('│ Agent:')} ${this.violet(agentLabel)} ${this.dim('│ Mode:')} ${permMode}`
+        `${this.dim('Engine:')} ${this.cyan(modelStr)} ${this.dim('│ Agent:')} ${this.violet(agentLabel)} ${this.dim('│ Mode:')} ${permMode}`
       );
       this.renderActiveApplicationsBar();
       return;
@@ -342,7 +350,7 @@ export class OrionCliRenderer {
 
     const line1Content = `${this.formatOrionLogo()}  ${this.violet(`v${info.version}`)} ${this.dim('· Sovereign AI Operating Layer')}`;
     const line2Content =
-      `${this.dim('Model:')} ${this.cyan(modelStr)}  ${this.dim('│')}  ` +
+      `${this.dim('Engine:')} ${this.cyan(modelStr)}  ${this.dim('│')}  ` +
       `${this.dim('Agent:')} ${this.violet(agentLabel)}  ${this.dim('│')}  ` +
       `${this.dim('Security:')} ${permMode}`;
     const line3Content =
@@ -645,7 +653,8 @@ export class OrionCliRenderer {
   public startStream(providerId: string, modelName: string): void {
     if (this.jsonMode) return;
     this.isStreaming = true;
-    this.writeLine(`${this.deepViolet('╰─')} ${this.brand('ORION')} ${this.dim(`[${providerId}:${modelName}]`)}`);
+    const publicLabel = resolvePublicEngineIdentity(providerId, modelName).publicLabel;
+    this.writeLine(`${this.deepViolet('╰─')} ${this.brand('ORION')} ${this.dim(`[${publicLabel}]`)}`);
     this.write('   ');
   }
 
@@ -674,8 +683,15 @@ export class OrionCliRenderer {
     providerLabel?: string
   ): void {
     if (this.jsonMode) return;
-    const safe = this.sanitize(response);
-    const meta = providerLabel ? `${providerLabel} · ${latencyMs}ms` : `${latencyMs}ms`;
+    const safe = sanitizeConversationalResponse(this.sanitize(response), {
+      redactProviderIds: true
+    });
+    let cleanBadge = providerLabel || '';
+    if (cleanBadge && (cleanBadge.includes(':') || cleanBadge.includes('/'))) {
+      const [pId, ...rest] = cleanBadge.split(/[:/]/);
+      cleanBadge = resolvePublicEngineIdentity(pId, rest.join(':')).publicLabel;
+    }
+    const meta = cleanBadge ? `${cleanBadge} · ${latencyMs}ms` : `${latencyMs}ms`;
     this.writeLine(`${this.deepViolet('╰─')} ${this.brand('ORION')} ${this.dim(`[${meta}]`)}`);
     for (const line of safe.split('\n')) {
       this.writeLine(`   ${line}`);

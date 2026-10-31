@@ -58,7 +58,11 @@ for (const file of testFiles) {
   const fullPath = path.join(testDir, file);
   process.stdout.write(`RUNNING: ${file} ... `);
   try {
-    const out = execFileSync(process.execPath, [helperPath, fullPath], { encoding: 'utf8', stdio: 'pipe' });
+    const out = execFileSync(process.execPath, [helperPath, fullPath], {
+      encoding: 'utf8',
+      stdio: 'pipe',
+      timeout: 120000
+    });
     passed++;
     const checks = countAssertionsInOutput(out);
     totalVerifyMarkers += checks;

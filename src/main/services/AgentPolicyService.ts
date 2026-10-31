@@ -287,9 +287,28 @@ export class AgentPolicyService {
     }
   ];
 
-  constructor(projectRoot: string = process.cwd()) {
-    this.projectRoot = path.resolve(projectRoot);
-    this.protectedPolicyPath = path.join(this.projectRoot, 'config', 'policies', 'orion-protected-policy.v1.json');
+  constructor(projectRoot?: string) {
+    const explicitRootPassed = projectRoot !== undefined;
+    this.projectRoot = path.resolve(projectRoot || process.cwd());
+    const localPolicyCandidate = path.join(this.projectRoot, 'config', 'policies', 'orion-protected-policy.v1.json');
+    const installRootEnv = process.env.ORION_INSTALL_ROOT ? path.resolve(process.env.ORION_INSTALL_ROOT) : '';
+    const installPolicyCandidate = installRootEnv
+      ? path.join(installRootEnv, 'config', 'policies', 'orion-protected-policy.v1.json')
+      : '';
+
+    // If running from an external workspace directory via global CLI, load bundled policy from ORION_INSTALL_ROOT
+    // instead of creating config/policies folders inside random user directories, while preserving explicit test roots.
+    if (
+      !fs.existsSync(localPolicyCandidate) &&
+      installPolicyCandidate &&
+      fs.existsSync(installPolicyCandidate) &&
+      (!explicitRootPassed || this.projectRoot === path.resolve(process.cwd()))
+    ) {
+      this.protectedPolicyPath = installPolicyCandidate;
+    } else {
+      this.protectedPolicyPath = localPolicyCandidate;
+    }
+
     this.globalUserPath = path.join(this.projectRoot, 'AGENTS.user.md');
     this.agentsUserDir = path.join(this.projectRoot, 'agents');
     this.expectedCanonicalHash = AgentPolicyService.computePolicyHash(CANONICAL_PROTECTED_POLICY);

@@ -71,6 +71,7 @@ export class DefaultBrowserProvider implements IBrowserProvider {
 
   // Optional live CDP process & WebSocket state
   private cdpEnabled: boolean;
+  private cdpIsVisible = false;
   private cdpProcess?: ChildProcess;
   private cdpWs?: WebSocket;
   private cdpDebugPort?: number;
@@ -224,6 +225,17 @@ export class DefaultBrowserProvider implements IBrowserProvider {
       });
     }
 
+    const isConsentPrompt =
+      /\b(authorize\s+application|grant\s+access|allow\s+access\s+to\s+your\s+account|requesting\s+permission\s+to\s+access|oauth\s+consent)\b/i.test(
+        `${lowerTitle} ${headingsText} ${lowerHtml.slice(0, 6000)}`
+      );
+    if (isConsentPrompt) {
+      blockers.push({
+        type: 'PERMISSION_PROMPT',
+        detail: `Security or OAuth consent prompt detected on '${title || url}'. Execution paused for explicit user consent.`
+      });
+    }
+
     return blockers;
   }
 
@@ -345,7 +357,14 @@ export class DefaultBrowserProvider implements IBrowserProvider {
 
   private async ensureCdpSession(timeoutMs = 6000, visibleWindow = false, executableOverride?: string): Promise<boolean> {
     if (this.cdpWs && this.cdpWs.readyState === WebSocket.OPEN) {
-      return true;
+      if (visibleWindow && !this.cdpIsVisible) {
+        await this.close();
+      } else {
+        if (visibleWindow && process.platform === 'win32') {
+          await new WindowManagerService().focusWindow('chrome').catch(() => false);
+        }
+        return true;
+      }
     }
 
     const chromeExe = DefaultBrowserProvider.findLocalChromiumExecutable(executableOverride);
@@ -373,6 +392,7 @@ export class DefaultBrowserProvider implements IBrowserProvider {
       );
 
       this.cdpProcess = proc;
+      this.cdpIsVisible = Boolean(visibleWindow);
       if (visibleWindow && proc.pid) {
         this.visibleChromeProcess = proc;
         this.visibleChromePid = proc.pid;
@@ -466,6 +486,9 @@ export class DefaultBrowserProvider implements IBrowserProvider {
       await this.sendCdpCommand('Page.enable', {}, 2000);
       await this.sendCdpCommand('Runtime.enable', {}, 2000);
       this.adapterMode = 'CDP_HEADLESS';
+      if (visibleWindow && process.platform === 'win32') {
+        await new WindowManagerService().focusWindow('chrome').catch(() => false);
+      }
       return true;
     } catch {
       await this.close();
@@ -669,6 +692,10 @@ export class DefaultBrowserProvider implements IBrowserProvider {
           })();
           await new Promise(r => setTimeout(r, 80));
           while (Date.now() < deadline) {
+            if (opts.signal?.aborted) {
+              await this.sendCdpCommand('Page.stopLoading', {}, 800).catch(() => null);
+              throw new Error('Task cancelled by operator');
+            }
             await this.syncStateFromCdp(1500);
             const currentLower = (this.currentUrl || '').toLowerCase();
             const urlSettled =
@@ -698,7 +725,11 @@ export class DefaultBrowserProvider implements IBrowserProvider {
 
           const obs = await this.observe();
           const cdpAuthBlocker = obs.blockers?.find(
-            b => b.type === 'ACCOUNT_CHOOSER' || b.type === 'TWO_FACTOR_AUTH'
+            b =>
+              b.type === 'ACCOUNT_CHOOSER' ||
+              b.type === 'TWO_FACTOR_AUTH' ||
+              b.type === 'PERMISSION_PROMPT' ||
+              (Boolean(opts.pauseOnAuthOrCaptcha) && (b.type === 'LOGIN_REQUIRED' || b.type === 'CAPTCHA'))
           );
           if (cdpAuthBlocker) {
             return {
@@ -723,6 +754,19 @@ export class DefaultBrowserProvider implements IBrowserProvider {
             durationMs: Date.now() - startTime
           };
         } catch (err: any) {
+          const isCancelled = /cancelled by operator/i.test(err.message || '') || Boolean(opts.signal?.aborted);
+          if (isCancelled) {
+            return {
+              actionId,
+              success: false,
+              preconditionsMet: true,
+              postconditionsVerified: false,
+              error: 'Browser navigation cancelled by operator.',
+              errorCode: 'CANCELLED',
+              timestamp: Date.now(),
+              durationMs: Date.now() - startTime
+            };
+          }
           const isTimeout = /timed?\s*out|abort/i.test(err.message || '');
           return {
             actionId,
@@ -848,7 +892,11 @@ export class DefaultBrowserProvider implements IBrowserProvider {
 
     const obs = await this.observe();
     const authPauseBlocker = obs.blockers?.find(
-      b => b.type === 'ACCOUNT_CHOOSER' || b.type === 'TWO_FACTOR_AUTH'
+      b =>
+        b.type === 'ACCOUNT_CHOOSER' ||
+        b.type === 'TWO_FACTOR_AUTH' ||
+        b.type === 'PERMISSION_PROMPT' ||
+        (Boolean(opts.pauseOnAuthOrCaptcha) && (b.type === 'LOGIN_REQUIRED' || b.type === 'CAPTCHA'))
     );
     if (authPauseBlocker) {
       return {
@@ -1785,9 +1833,116 @@ export class DefaultBrowserProvider implements IBrowserProvider {
       };
     }
 
-    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(cleanQuery)}`;
-    const navRes = await this.navigate(searchUrl, options);
+    const useVisibleChromeForm = Boolean(options?.visibleWindow || options?.searchEngineUrl);
+    let navRes: BrowserActionResult;
+
+    if (useVisibleChromeForm) {
+      const wantsVisible = Boolean(options?.visibleWindow);
+      const cdpReady = await this.ensureCdpSession(
+        options?.timeoutMs ?? 8000,
+        wantsVisible,
+        options?.executableOverride
+      );
+      if (wantsVisible && !cdpReady) {
+        return {
+          actionId,
+          success: false,
+          preconditionsMet: false,
+          postconditionsVerified: false,
+          searchResults: [],
+          error: 'BROWSER_UNAVAILABLE: Visible foreground Chrome CDP session could not be initialized for search.',
+          errorCode: 'BROWSER_UNAVAILABLE',
+          timestamp: Date.now(),
+          durationMs: Date.now() - startTime
+        };
+      }
+
+      const engineHomeUrl = options?.searchEngineUrl || 'https://html.duckduckgo.com/html/';
+      navRes = await this.navigate(engineHomeUrl, {
+        ...options,
+        useCdpAdapter: cdpReady ? true : options?.useCdpAdapter,
+        visibleWindow: wantsVisible
+      });
+
+      if (navRes.success && cdpReady && this.cdpWs && this.cdpWs.readyState === WebSocket.OPEN) {
+        const candidateSelectors = ['input[name="q"]', '#q', '#search-box', '#search-input', 'input[type="search"]', 'input[type="text"]'];
+        let matchedInputSelector: string | undefined;
+        for (const sel of candidateSelectors) {
+          if (this.matchElementInDom(sel)) {
+            matchedInputSelector = sel;
+            break;
+          }
+        }
+        if (matchedInputSelector) {
+          const prevUrl = this.currentUrl;
+          await this.typeText(matchedInputSelector, cleanQuery, { explicitAuthorization: true });
+          await this.sendCdpCommand(
+            'Runtime.evaluate',
+            {
+              expression: `(() => {
+                const el = document.querySelector(${JSON.stringify(matchedInputSelector)});
+                if (!el) return { submitted: false };
+                const form = el.closest('form');
+                if (form) {
+                  if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit();
+                  } else {
+                    form.submit();
+                  }
+                  return { submitted: true };
+                }
+                const btn = document.querySelector('button[type="submit"], input[type="submit"], #search-submit');
+                if (btn && typeof btn.click === 'function') {
+                  btn.click();
+                  return { submitted: true };
+                }
+                return { submitted: false };
+              })()`,
+              returnByValue: true
+            },
+            3000
+          ).catch(() => null);
+
+          const submitDeadline = Date.now() + Math.min(options?.timeoutMs ?? 6000, 6000);
+          await new Promise(r => setTimeout(r, 120));
+          while (Date.now() < submitDeadline) {
+            await this.syncStateFromCdp(1500);
+            if (
+              this.currentReadyState === 'complete' &&
+              (this.currentUrl !== prevUrl || this.currentUrl.includes('q='))
+            ) {
+              break;
+            }
+            await new Promise(r => setTimeout(r, 80));
+          }
+          navRes = {
+            ...navRes,
+            observation: await this.observe()
+          };
+        } else if (!engineHomeUrl.includes('?')) {
+          const fallbackQueryUrl = `${engineHomeUrl}${engineHomeUrl.includes('?') ? '&' : '?'}q=${encodeURIComponent(cleanQuery)}`;
+          navRes = await this.navigate(fallbackQueryUrl, {
+            ...options,
+            useCdpAdapter: true,
+            visibleWindow: wantsVisible
+          });
+        }
+      }
+    } else {
+      const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(cleanQuery)}`;
+      navRes = await this.navigate(searchUrl, options);
+    }
+
     const results: Array<{ title: string; url: string; snippet: string }> = [];
+    const engineBasePath = (() => {
+      try {
+        if (!options?.searchEngineUrl) return '';
+        const u = new URL(options.searchEngineUrl);
+        return `${u.origin}${u.pathname}`.toLowerCase();
+      } catch {
+        return '';
+      }
+    })();
 
     // Unwrap DuckDuckGo redirect links (?uddg=...) if present
     for (const link of navRes.observation?.links || []) {
@@ -1799,9 +1954,12 @@ export class DefaultBrowserProvider implements IBrowserProvider {
           realHref = decodeURIComponent(uddg);
         }
       } catch {}
+      const lowerHref = realHref.toLowerCase();
+      const isSelfSearchPage = engineBasePath ? lowerHref === engineBasePath : false;
       if (
         realHref.startsWith('http') &&
-        !realHref.includes('duckduckgo.com') &&
+        !lowerHref.includes('duckduckgo.com') &&
+        !isSelfSearchPage &&
         link.text &&
         link.text.length > 2
       ) {
@@ -2078,7 +2236,8 @@ export class DefaultBrowserProvider implements IBrowserProvider {
           useCdpAdapter: request.useCdpAdapter,
           visibleWindow: request.visibleWindow,
           executableOverride: request.executableOverride,
-          timeoutMs: request.timeoutMs
+          timeoutMs: request.timeoutMs,
+          signal: controller.signal
         });
         const interruptedAfterSearch = checkInterrupted();
         if (interruptedAfterSearch) return interruptedAfterSearch;
@@ -2120,8 +2279,11 @@ export class DefaultBrowserProvider implements IBrowserProvider {
           useCdpAdapter: request.useCdpAdapter,
           visibleWindow: request.visibleWindow,
           executableOverride: request.executableOverride,
-          timeoutMs: request.timeoutMs ?? 10000
+          timeoutMs: request.timeoutMs ?? 10000,
+          signal: controller.signal
         });
+        const interruptedAfterRepoNav = checkInterrupted();
+        if (interruptedAfterRepoNav) return interruptedAfterRepoNav;
         const afterObs = await this.observe();
         recordStage('OBSERVE_AGAIN', `Observed repository page '${afterObs.title}' at ${afterObs.url}.`, navRes.success);
         const extracted = (afterObs.extractedText || '').trim();
@@ -2164,7 +2326,8 @@ export class DefaultBrowserProvider implements IBrowserProvider {
           useCdpAdapter: request.useCdpAdapter,
           visibleWindow: request.visibleWindow,
           executableOverride: request.executableOverride,
-          timeoutMs: request.timeoutMs
+          timeoutMs: request.timeoutMs,
+          signal: controller.signal
         });
         const interruptedAfterNav = checkInterrupted();
         if (interruptedAfterNav) return interruptedAfterNav;
@@ -2277,6 +2440,7 @@ export class DefaultBrowserProvider implements IBrowserProvider {
     }
 
     // Never terminate detached user-profile Chrome windows on provider close; only clear local tracking references.
+    this.cdpIsVisible = false;
     this.visibleChromeProcess = undefined;
     this.visibleChromePid = undefined;
     this.visibleWindowVerified = false;

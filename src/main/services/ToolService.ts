@@ -688,11 +688,13 @@ export class ToolService implements IToolService {
           if (this.isSensitiveOrRestrictedPath(targetDir) || this.isSensitiveOrRestrictedPath(resolvedPath)) {
             throw new Error(`SECURITY POLICY VIOLATION: Directory listing of restricted or sensitive boundary '${targetDir}' is strictly prohibited.`);
           }
-          const entries = fs.readdirSync(resolvedPath, { withFileTypes: true });
+          const entries = fs
+            .readdirSync(resolvedPath, { withFileTypes: true })
+            .sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name));
           data = {
             directory: resolvedPath,
             itemCount: entries.length,
-            items: entries.slice(0, 100).map(e => ({
+            items: entries.slice(0, 250).map(e => ({
               name: e.name,
               isDirectory: e.isDirectory(),
               isFile: e.isFile()
@@ -936,8 +938,9 @@ export class ToolService implements IToolService {
           }
           const res = await this.browserProvider.navigate(url, {
             waitForSelector: call.arguments?.waitForSelector,
-            useCdpAdapter: call.arguments?.useCdpAdapter,
-            visibleWindow: call.arguments?.visibleWindow,
+            useCdpAdapter: call.arguments?.useCdpAdapter ?? Boolean(call.arguments?.visibleWindow || call.arguments?.openInChromeWindow),
+            visibleWindow: call.arguments?.visibleWindow ?? Boolean(call.arguments?.openInChromeWindow),
+            pauseOnAuthOrCaptcha: call.arguments?.pauseOnAuthOrCaptcha,
             timeoutMs: call.arguments?.timeoutMs
           });
           if ((res as any).errorCode === 'PAUSED_FOR_USER_AUTH') {
@@ -980,8 +983,12 @@ export class ToolService implements IToolService {
 
         case 'browser.search': {
           const query = String(call.arguments?.query || 'mechanical keyboards').trim();
+          const wantsVisible = Boolean(call.arguments?.visibleWindow || call.arguments?.openInChromeWindow);
           const res = await this.browserProvider.searchWeb(query, {
-            useCdpAdapter: call.arguments?.useCdpAdapter
+            useCdpAdapter: call.arguments?.useCdpAdapter ?? (wantsVisible ? true : undefined),
+            visibleWindow: wantsVisible ? true : call.arguments?.visibleWindow,
+            searchEngineUrl: call.arguments?.searchEngineUrl,
+            timeoutMs: call.arguments?.timeoutMs
           });
           if (!res.success && res.searchResults.length === 0) {
             throw new Error(res.error || `Web search failed for '${query}'.`);
@@ -989,6 +996,8 @@ export class ToolService implements IToolService {
           data = {
             query,
             pageTitle: res.observation?.title || 'Search Results',
+            url: res.observation?.url,
+            visibleWindowVerified: Boolean(res.observation?.visibleWindowVerified),
             extractedText: (res.observation?.extractedText || '').slice(0, 2000),
             topLinks: (res.observation?.links || []).slice(0, 10),
             searchResults: res.searchResults

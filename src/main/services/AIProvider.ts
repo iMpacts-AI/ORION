@@ -1,4 +1,13 @@
 import { ToolCall, ToolResult } from '../../shared/types';
+import {
+  buildFriendlyConversationalReply,
+  classifyConversationalTurn,
+  formatLogicalPath,
+  isExplicitFileOperationQuery,
+  isExplicitPathInspectionQuery,
+  isExplicitSystemSpecQuery,
+  sanitizeConversationalResponse
+} from '../../shared/branding/OrionEngineIdentity';
 
 export interface AIProviderConfig {
   apiKey?: string;
@@ -133,6 +142,15 @@ export class LocalHeuristicAIProvider implements IAIProvider {
     const lower = prompt.toLowerCase().trim();
     if (LocalHeuristicAIProvider.detectUnsupportedCapability(prompt).unsupported) {
       return { intent: 'CONVERSATION', confidence: 0.99 };
+    }
+
+    const turnClass = classifyConversationalTurn(prompt);
+    if (turnClass.isGreetingOrSmallTalk) {
+      return { intent: 'CONVERSATION', confidence: 0.99 };
+    }
+
+    if (/^(?:fix\s+it|do\s+it|run\s+that|open\s+it|open\s+that|change\s+it|update\s+it)[.!?]*$/i.test(lower)) {
+      return { intent: 'CONVERSATION', confidence: 0.95 };
     }
 
     // Fast Deterministic Path Detection
@@ -457,11 +475,18 @@ export class LocalHeuristicAIProvider implements IAIProvider {
 
     if (
       lower.startsWith('search ') ||
+      lower.includes('search in chrome') ||
       lower.includes('search for ') ||
       lower.includes('search the web')
     ) {
+      const openInChromeWindow =
+        lower.includes('in chrome') ||
+        lower.includes('open chrome') ||
+        lower.includes('using chrome') ||
+        lower.includes('visibly');
       const searchQuery = prompt
-        .replace(/^search\s+(?:the\s+web\s+)?(?:for\s+)?/i, '')
+        .replace(/^search\s+(?:in\s+chrome\s+|the\s+web\s+)?(?:for\s+)?/i, '')
+        .replace(/\s+in\s+chrome$/i, '')
         .replace(/\s+and\s+show\s+me\s+the\s+result.*$/i, '')
         .replace(/[.,;]+$/, '')
         .trim();
@@ -471,7 +496,7 @@ export class LocalHeuristicAIProvider implements IAIProvider {
         suggestedTools: ['browser.search'],
         fastPathMatch: {
           toolId: 'browser.search',
-          args: { query: searchQuery || prompt }
+          args: { query: searchQuery || prompt, openInChromeWindow }
         }
       };
     }
@@ -520,40 +545,18 @@ export class LocalHeuristicAIProvider implements IAIProvider {
       };
     }
 
-    if (
-      lower.includes('list') ||
-      lower.includes('files') ||
-      lower.includes('directory') ||
-      lower.includes('folder') ||
-      lower.includes('read') ||
-      lower.includes('inspect')
-    ) {
+    if (isExplicitFileOperationQuery(prompt)) {
+      const isRead = /\b(?:read|summarize)\b/i.test(lower) && !/\b(?:list|find\s+the\s+largest)\b/i.test(lower);
       return {
         intent: 'FILE_OPERATION',
         confidence: 0.95,
-        suggestedTools: lower.includes('read') ? ['file.read_text'] : ['file.list_directory'],
-        fastPathMatch: lower.includes('read') ? undefined : { toolId: 'file.list_directory', args: { dirPath: '.' } }
+        suggestedTools: isRead ? ['file.read_text'] : ['file.list_directory'],
+        fastPathMatch: isRead ? undefined : { toolId: 'file.list_directory', args: { dirPath: '.' } }
       };
     }
 
-    // General Heuristic Intents
-    if (
-      lower.includes('cpu') ||
-      lower.includes('ram') ||
-      lower.includes('memory') ||
-      lower.includes('system') ||
-      lower.includes('disk') ||
-      lower.includes('storage') ||
-      lower.includes('network') ||
-      lower.includes('time') ||
-      lower.includes('clock') ||
-      lower.includes('uptime') ||
-      lower.includes('machine') ||
-      lower.includes('computer') ||
-      lower.includes('specs') ||
-      lower.includes('specification') ||
-      lower.includes('hardware')
-    ) {
+    // Explicit System Specification & Telemetry Queries Only
+    if (isExplicitSystemSpecQuery(prompt)) {
       return {
         intent: 'SYSTEM_QUERY',
         confidence: 0.95,
@@ -573,9 +576,12 @@ export class LocalHeuristicAIProvider implements IAIProvider {
       lower.includes('machine') ||
       lower.includes('computer') ||
       lower.includes('specs') ||
+      lower.includes('spec') ||
       lower.includes('specification') ||
+      lower.includes('diagnostic') ||
       lower.includes('hardware') ||
-      lower.includes('overview')
+      lower.includes('overview') ||
+      lower.includes('posture')
     ) {
       return ['system.get_info', 'system.get_cpu_usage', 'system.get_memory_usage', 'system.get_disk_usage'];
     }
@@ -651,11 +657,10 @@ export class LocalHeuristicAIProvider implements IAIProvider {
 • Hardware Emergency Stop: Zero-delay process-level execution interrupt capability`;
     }
 
-    if (/\b(hello|hey|greetings)\b/i.test(lower) || lower.trim() === 'hi' || lower.startsWith('hi ')) {
-      return 'Greetings. ORION AI Command System is online (Deterministic Rule-Based Engine active). All local tools, telemetry, and security gates are operational.';
-    }
-    if (lower.includes('who are you') || lower.includes('what is orion')) {
-      return 'I am ORION — Advanced Agentic Desktop Command System. Operating with deterministic task orchestration, closed-loop tool execution, and multi-provider failover routing.';
+    // 2.5. Friendly Greetings, Small Talk, Context Retention & Clarifications
+    const friendlyReply = buildFriendlyConversationalReply(effectiveUserPrompt, conversationHistory);
+    if (friendlyReply) {
+      return friendlyReply;
     }
 
     // 3. Synthesize from retrieved persisted memory if present in context
@@ -665,10 +670,16 @@ export class LocalHeuristicAIProvider implements IAIProvider {
         const memLines = memMatch[1]
           .trim()
           .split('\n')
-          .map(l => l.replace(/^\[MEMORY_DATA[^\]]*\]\s*/, '').trim())
+          .map(l =>
+            sanitizeConversationalResponse(l.replace(/^\[MEMORY_DATA[^\]]*\]\s*/, '').trim(), {
+              workspaceRoot: process.cwd(),
+              redactProviderIds: true,
+              preserveExplicitPaths: isExplicitPathInspectionQuery(effectiveUserPrompt)
+            })
+          )
           .filter(Boolean);
         if (memLines.length > 0) {
-          return `ORION Persisted Memory Recall:\n` + memLines.map(m => `• ${m}`).join('\n');
+          return `Here is what I found in your saved notes and context:\n` + memLines.map(m => `• ${m}`).join('\n');
         }
       }
     }
@@ -679,7 +690,11 @@ export class LocalHeuristicAIProvider implements IAIProvider {
       return `UNSUPPORTED CAPABILITY: ORION does not have a verified native tool for ${unsupportedCheck.capability} (${unsupportedCheck.reason}). No system mutation or external action was executed. Use /tools to inspect the 28 registered authoritative tools.`;
     }
 
-    return `[ORION OFFLINE FALLBACK] Query received: "${effectiveUserPrompt}". No deterministic local tool matched this request and no neural provider was invoked. Use /tools to inspect verified native tools or /providers to check local Ollama model status.`;
+    const sanitizedQuery = sanitizeConversationalResponse(effectiveUserPrompt, {
+      workspaceRoot: process.cwd(),
+      redactProviderIds: true
+    });
+    return `I heard your request ("${sanitizedQuery}"), and no external action was taken automatically. ORION Core is currently running in deterministic local mode — ask me to open an app, search in Chrome, inspect workspace files, or run /doctor to configure an ORION Local or ORION Intelligence reasoning runtime for open-ended generation.`;
   }
 
   public static detectUnsupportedCapability(query: string): { unsupported: boolean; capability?: string; reason?: string } {
@@ -780,7 +795,8 @@ export class LocalHeuristicAIProvider implements IAIProvider {
           summaries.push(`System Time: ${parsed.localTimeString} (${parsed.localDateString}).`);
         } else if (toolId === 'file.list_directory') {
           const fileSample = parsed.items?.slice(0, 8).map((i: any) => i.name).join(', ') || '';
-          summaries.push(`Directory Inspection: ${parsed.itemCount} items detected at '${parsed.directory}' (e.g. ${fileSample}).`);
+          const logicalDir = formatLogicalPath(String(parsed.directory || '.'), process.cwd());
+          summaries.push(`Directory Inspection: ${parsed.itemCount} items detected at '${logicalDir}' (e.g. ${fileSample}).`);
         } else if (toolId === 'computer.natural_language_command' || toolId === 'computer.execute_action' || toolId === 'computer.plan_task') {
           const cmd = parsed.naturalLanguageCommand || 'Desktop Action';
           if (parsed.status === 'COMPLETED' || parsed.success || parsed.postconditionsVerified) {

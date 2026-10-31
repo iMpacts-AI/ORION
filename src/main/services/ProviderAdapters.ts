@@ -29,6 +29,14 @@ import {
   LocalHeuristicAIProvider
 } from './AIProvider';
 import { SSEParser, StreamTimeoutConfig, DEFAULT_STREAM_TIMEOUTS } from './SSEParser';
+import {
+  classifyConversationalTurn,
+  isExplicitFileOperationQuery,
+  isExplicitSystemSpecQuery
+} from '../../shared/branding/OrionEngineIdentity';
+
+const ORION_CONVERSATIONAL_SYSTEM_PROMPT =
+  "You are ORION, a warm, helpful, and capable desktop AI assistant. Match the user's tone naturally: reply warmly and concisely to greetings and casual conversation without hardware specs or internal metadata, and be clear, accurate, and grounded in verified results for technical tasks. Never output internal IDs (such as mem_*), system headers, raw local model names, or personal filesystem paths.";
 
 export type ErrorClassification =
   | 'NOT_CONFIGURED'
@@ -180,6 +188,15 @@ export abstract class BaseCloudProviderAdapter implements IAIProvider {
       return { intent: 'CONVERSATION', confidence: 0.99 };
     }
 
+    const turnClass = classifyConversationalTurn(prompt);
+    if (turnClass.isGreetingOrSmallTalk) {
+      return { intent: 'CONVERSATION', confidence: 0.99 };
+    }
+
+    if (/^(?:fix\s+it|do\s+it|run\s+that|open\s+it|open\s+that|change\s+it|update\s+it)[.!?]*$/i.test(lower)) {
+      return { intent: 'CONVERSATION', confidence: 0.95 };
+    }
+
     const urlInPrompt = prompt.match(/https?:\/\/[^\s"'<>]+/i);
     if (
       urlInPrompt &&
@@ -216,11 +233,18 @@ export abstract class BaseCloudProviderAdapter implements IAIProvider {
 
     if (
       lower.startsWith('search ') ||
+      lower.includes('search in chrome') ||
       lower.includes('search for ') ||
       lower.includes('search the web')
     ) {
+      const openInChromeWindow =
+        lower.includes('in chrome') ||
+        lower.includes('open chrome') ||
+        lower.includes('using chrome') ||
+        lower.includes('visibly');
       const searchQuery = prompt
-        .replace(/^search\s+(?:the\s+web\s+)?(?:for\s+)?/i, '')
+        .replace(/^search\s+(?:in\s+chrome\s+|the\s+web\s+)?(?:for\s+)?/i, '')
+        .replace(/\s+in\s+chrome$/i, '')
         .replace(/\s+and\s+show\s+me\s+the\s+result.*$/i, '')
         .replace(/[.,;]+$/, '')
         .trim();
@@ -230,7 +254,7 @@ export abstract class BaseCloudProviderAdapter implements IAIProvider {
         suggestedTools: ['browser.search'],
         fastPathMatch: {
           toolId: 'browser.search',
-          args: { query: searchQuery || prompt }
+          args: { query: searchQuery || prompt, openInChromeWindow }
         }
       };
     }
@@ -318,26 +342,40 @@ export abstract class BaseCloudProviderAdapter implements IAIProvider {
       };
     }
 
-    if (lower.includes('cpu') || lower.includes('ram') || lower.includes('memory') || lower.includes('system') || lower.includes('disk') || lower.includes('network') || lower.includes('time') || lower.includes('spec') || lower.includes('computer') || lower.includes('hardware')) {
+    if (isExplicitSystemSpecQuery(prompt)) {
       return {
         intent: 'SYSTEM_QUERY',
-        confidence: 0.9,
+        confidence: 0.95,
         suggestedTools:
-          lower.includes('spec') || lower.includes('computer') || lower.includes('hardware')
+          lower.includes('spec') ||
+          lower.includes('diagnostic') ||
+          lower.includes('computer') ||
+          lower.includes('machine') ||
+          lower.includes('overview') ||
+          lower.includes('hardware')
             ? ['system.get_info', 'system.get_cpu_usage', 'system.get_memory_usage', 'system.get_disk_usage']
-            : lower.includes('cpu')
-              ? ['system.get_cpu_usage']
-              : lower.includes('ram')
-                ? ['system.get_memory_usage']
-                : ['system.get_info']
+            : lower.includes('cpu') && (lower.includes('ram') || lower.includes('memory'))
+              ? ['system.get_cpu_usage', 'system.get_memory_usage']
+              : lower.includes('cpu')
+                ? ['system.get_cpu_usage']
+                : lower.includes('ram') || lower.includes('memory')
+                  ? ['system.get_memory_usage']
+                  : lower.includes('disk') || lower.includes('storage')
+                    ? ['system.get_disk_usage']
+                    : lower.includes('network') || lower.includes('ip')
+                      ? ['system.get_network_status']
+                      : lower.includes('time') || lower.includes('clock')
+                        ? ['system.get_current_time']
+                        : ['system.get_info']
       };
     }
 
-    if (lower.includes('list files') || lower.includes('read file') || lower.includes('directory') || lower.includes('folder') || lower.includes('files in')) {
+    if (isExplicitFileOperationQuery(prompt)) {
+      const isRead = /\b(?:read|summarize)\b/i.test(lower) && !/\b(?:list|find\s+the\s+largest)\b/i.test(lower);
       return {
         intent: 'FILE_OPERATION',
         confidence: 0.9,
-        suggestedTools: lower.includes('read') ? ['file.read_text'] : ['file.list_directory']
+        suggestedTools: isRead ? ['file.read_text'] : ['file.list_directory']
       };
     }
 
@@ -415,7 +453,7 @@ export class OpenAICompatibleAdapter extends BaseCloudProviderAdapter {
     let fullResponse = '';
 
     const messages = [
-      { role: 'system', content: 'You are ORION — Autonomous AI Command Center Assistant. Be concise, technical, and precise.' },
+      { role: 'system', content: ORION_CONVERSATIONAL_SYSTEM_PROMPT },
       ...(conversationHistory || []),
       { role: 'user', content: prompt }
     ];
@@ -694,7 +732,7 @@ export class OpenAICompatibleAdapter extends BaseCloudProviderAdapter {
 
     try {
       const messages = [
-        { role: 'system', content: 'You are ORION — Autonomous AI Command Center Assistant. Be concise, technical, and precise.' },
+        { role: 'system', content: ORION_CONVERSATIONAL_SYSTEM_PROMPT },
         ...(conversationHistory || []),
         { role: 'user', content: prompt }
       ];
@@ -1335,9 +1373,13 @@ export class OllamaProvider extends OpenAICompatibleAdapter {
       return fastPlan;
     }
 
-    const lower = prompt.toLowerCase().trim();
+    const turnClass = classifyConversationalTurn(prompt);
     const looksConversational =
-      /^(hi|hello|hey|who are you|what is orion|explain|summarize|describe|tell me about|thank you|thanks)\b/i.test(lower) ||
+      turnClass.isGreetingOrSmallTalk ||
+      turnClass.isPureConversational ||
+      /^(hi|hello|hey|good\s+(?:morning|afternoon|evening|night)|how\s+are\s+you|what'?s\s+up|who\s+are\s+you|what\s+is\s+orion|what\s+can\s+you\s+do|explain|summarize|describe|tell\s+me\s+about|thank\s+you|thanks|my\s+name\s+is|what\s+is\s+my\s+name|what\s+did\s+i)\b/i.test(
+        prompt.toLowerCase().trim()
+      ) ||
       availableTools.length === 0;
     if (looksConversational) {
       return fastPlan;
@@ -1599,7 +1641,7 @@ export class AnthropicProvider extends BaseCloudProviderAdapter {
         body: JSON.stringify({
           model: this.config.defaultModel,
           max_tokens: 1024,
-          system: 'You are ORION — Autonomous AI Command Center Assistant by iMpact AI. Be concise, technical, and precise.',
+          system: ORION_CONVERSATIONAL_SYSTEM_PROMPT,
           messages
         }),
         signal: controller.signal

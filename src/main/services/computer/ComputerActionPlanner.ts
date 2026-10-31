@@ -242,22 +242,25 @@ export class ComputerActionPlanner {
 
     // 2B. Direct Application Launching (40+ Windows Apps + Typo-Tolerant Open Triggers)
     else if (
-      commandLower.includes('open notepad') ||
-      commandLower.includes('launch notepad') ||
-      commandLower.includes('open calc') ||
-      commandLower.includes('open calculator') ||
-      commandLower.includes('open terminal') ||
-      commandLower.includes('open powershell') ||
-      commandLower.includes('open cmd') ||
-      commandLower.includes('open paint') ||
-      commandLower.includes('open task manager') ||
-      commandLower.startsWith('open ') ||
-      commandLower.startsWith('oprn ') ||
-      commandLower.startsWith('opne ') ||
-      commandLower.startsWith('launch ') ||
-      commandLower.startsWith('lunach ') ||
-      commandLower.startsWith('start ') ||
-      commandLower.includes('try and open')
+      !/\b(?:open\s+(?:file|edit|view|help|context)\s+menu)\b/i.test(commandLower) &&
+      (
+        commandLower.includes('open notepad') ||
+        commandLower.includes('launch notepad') ||
+        commandLower.includes('open calc') ||
+        commandLower.includes('open calculator') ||
+        commandLower.includes('open terminal') ||
+        commandLower.includes('open powershell') ||
+        commandLower.includes('open cmd') ||
+        commandLower.includes('open paint') ||
+        commandLower.includes('open task manager') ||
+        commandLower.startsWith('open ') ||
+        commandLower.startsWith('oprn ') ||
+        commandLower.startsWith('opne ') ||
+        commandLower.startsWith('launch ') ||
+        commandLower.startsWith('lunach ') ||
+        commandLower.startsWith('start ') ||
+        commandLower.includes('try and open')
+      )
     ) {
       let appName = 'notepad';
       if (commandLower.includes('notepad')) appName = 'notepad';
@@ -293,12 +296,17 @@ export class ComputerActionPlanner {
       else if (commandLower.includes('blender')) appName = 'blender';
       else if (commandLower.includes('audacity')) appName = 'audacity';
       else if (commandLower.includes('snipping')) appName = 'snippingtool';
+      else if (commandLower.includes('display settings')) appName = 'ms-settings:display';
+      else if (commandLower.includes('sound settings')) appName = 'ms-settings:sound';
+      else if (commandLower.includes('network settings')) appName = 'ms-settings:network';
       else if (commandLower.includes('settings')) appName = 'ms-settings:';
       else if (commandLower.includes('control panel')) appName = 'control';
       else {
         const appMatch = naturalLanguageCommand.match(/(?:open|oprn|opne|launch|lunach|start|focus)\s+(?:the\s+)?([a-zA-Z0-9_\-]+)/i);
         if (appMatch) appName = appMatch[1].trim().toLowerCase();
       }
+
+      const expectedWindowTarget = appName.startsWith('ms-settings:') ? 'Settings' : appName;
 
       actions.push({
         id: `act_${Date.now()}_1`,
@@ -309,19 +317,19 @@ export class ComputerActionPlanner {
         riskLevel: 'LOW_RISK',
         reason: `Launch application ${appName}`,
         postconditions: {
-          verifyActiveApp: appName
+          verifyActiveApp: expectedWindowTarget
         }
       });
 
       actions.push({
         id: `act_${Date.now()}_2`,
         type: 'FOCUS_WINDOW',
-        target: appName,
+        target: expectedWindowTarget,
         confidence: 0.98,
         riskLevel: 'LOW_RISK',
-        reason: `Bring ${appName} window to the foreground`,
+        reason: `Bring ${expectedWindowTarget} window to the foreground`,
         postconditions: {
-          verifyActiveWindow: appName
+          verifyActiveWindow: expectedWindowTarget
         }
       });
 
@@ -445,6 +453,122 @@ export class ComputerActionPlanner {
         riskLevel: 'LOW_RISK',
         reason: 'Scroll active desktop viewport'
       });
+    }
+
+    // 4b. Explicit Cursor Move, Drag-and-Drop, Right-Click, Double-Click, Coordinate Click & Keyboard/Menu Shortcuts
+    else if (/\b(?:move\s+(?:the\s+)?(?:mouse|cursor|pointer))\b/i.test(naturalLanguageCommand)) {
+      const coordMatch = naturalLanguageCommand.match(/(-?\d+)\s*[,x\s]\s*(-?\d+)/i);
+      const x = coordMatch ? parseInt(coordMatch[1], 10) : 960;
+      const y = coordMatch ? parseInt(coordMatch[2], 10) : 540;
+      actions.push({
+        id: `act_${Date.now()}_move`,
+        type: 'MOUSE_MOVE',
+        parameters: { x, y },
+        confidence: 0.96,
+        riskLevel: 'LOW_RISK',
+        reason: `Move desktop cursor to (${x}, ${y})`
+      });
+    } else if (/\bdrag\b/i.test(naturalLanguageCommand)) {
+      const dragMatch = naturalLanguageCommand.match(/(-?\d+)\s*[,x\s]\s*(-?\d+).*?\bto\b.*?(-?\d+)\s*[,x\s]\s*(-?\d+)/i);
+      const from = dragMatch
+        ? { x: parseInt(dragMatch[1], 10), y: parseInt(dragMatch[2], 10) }
+        : { x: 400, y: 400 };
+      const to = dragMatch
+        ? { x: parseInt(dragMatch[3], 10), y: parseInt(dragMatch[4], 10) }
+        : { x: 640, y: 400 };
+      actions.push({
+        id: `act_${Date.now()}_drag`,
+        type: 'DRAG',
+        parameters: { from, to },
+        confidence: 0.93,
+        riskLevel: 'MODERATE_RISK',
+        reason: `Drag from (${from.x}, ${from.y}) to (${to.x}, ${to.y})`
+      });
+    } else if (/\b(?:right[- ]click)\b/i.test(naturalLanguageCommand)) {
+      const coordMatch = naturalLanguageCommand.match(/(-?\d+)\s*[,x]\s*(-?\d+)/i);
+      const textMatch = naturalLanguageCommand.match(/right[- ]click\s+(?:on\s+)?(?:the\s+)?["']?([a-zA-Z0-9_\-\s]+?)(?:\s+button)?["']?$/i);
+      actions.push({
+        id: `act_${Date.now()}_rclick`,
+        type: 'MOUSE_RIGHT_CLICK',
+        ...(coordMatch
+          ? { parameters: { x: parseInt(coordMatch[1], 10), y: parseInt(coordMatch[2], 10), button: 'right' } }
+          : { selector: { text: textMatch ? textMatch[1].trim() : 'Context Area' } }),
+        confidence: 0.92,
+        riskLevel: 'MODERATE_RISK',
+        reason: coordMatch
+          ? `Right-click at (${coordMatch[1]}, ${coordMatch[2]})`
+          : `Right-click UI target '${textMatch ? textMatch[1].trim() : 'Context Area'}'`
+      });
+    } else if (/\b(?:double[- ]click)\b/i.test(naturalLanguageCommand)) {
+      const coordMatch = naturalLanguageCommand.match(/(-?\d+)\s*[,x]\s*(-?\d+)/i);
+      const textMatch = naturalLanguageCommand.match(/double[- ]click\s+(?:on\s+)?(?:the\s+)?["']?([a-zA-Z0-9_\-\s]+?)(?:\s+button)?["']?$/i);
+      actions.push({
+        id: `act_${Date.now()}_dclick`,
+        type: 'MOUSE_DOUBLE_CLICK',
+        ...(coordMatch
+          ? { parameters: { x: parseInt(coordMatch[1], 10), y: parseInt(coordMatch[2], 10) } }
+          : { selector: { text: textMatch ? textMatch[1].trim() : 'Item' } }),
+        confidence: 0.92,
+        riskLevel: 'MODERATE_RISK',
+        reason: coordMatch
+          ? `Double-click at (${coordMatch[1]}, ${coordMatch[2]})`
+          : `Double-click UI target '${textMatch ? textMatch[1].trim() : 'Item'}'`
+      });
+    } else if (/\b(?:left[- ]click|click)\s+(?:at\s+)?\(?(-?\d+)\s*,\s*(-?\d+)\)?/i.test(naturalLanguageCommand)) {
+      const coordMatch = naturalLanguageCommand.match(/\b(?:left[- ]click|click)\s+(?:at\s+)?\(?(-?\d+)\s*,\s*(-?\d+)\)?/i)!;
+      const x = parseInt(coordMatch[1], 10);
+      const y = parseInt(coordMatch[2], 10);
+      actions.push({
+        id: `act_${Date.now()}_coord_click`,
+        type: 'MOUSE_CLICK',
+        parameters: { x, y, button: 'left' },
+        confidence: 0.94,
+        riskLevel: 'MODERATE_RISK',
+        reason: `Left-click at coordinates (${x}, ${y})`
+      });
+    } else if (/\b(?:navigate\s+menu|open\s+file\s+menu|open\s+edit\s+menu)\b/i.test(naturalLanguageCommand)) {
+      const menuKey = commandLower.includes('edit') ? 'e' : 'f';
+      actions.push({
+        id: `act_${Date.now()}_menu`,
+        type: 'HOTKEY',
+        parameters: { keys: ['alt', menuKey] },
+        confidence: 0.94,
+        riskLevel: 'LOW_RISK',
+        reason: `Open application '${menuKey.toUpperCase()}' menu via Alt+${menuKey.toUpperCase()}`
+      });
+    } else if (
+      /^\s*press\s+/i.test(naturalLanguageCommand) &&
+      !commandLower.includes('press windows') &&
+      !commandLower.includes('start menu')
+    ) {
+      const rawKeyExpr = naturalLanguageCommand
+        .replace(/^\s*press\s+(?:the\s+)?/i, '')
+        .replace(/\s+(?:key|keys|shortcut)\s*$/i, '')
+        .trim()
+        .toLowerCase();
+      if (rawKeyExpr.includes('+')) {
+        const keys = rawKeyExpr
+          .split('+')
+          .map(k => k.trim().replace(/^ctrl$/, 'control'))
+          .filter(Boolean);
+        actions.push({
+          id: `act_${Date.now()}_hotkey`,
+          type: 'HOTKEY',
+          parameters: { keys },
+          confidence: 0.96,
+          riskLevel: 'LOW_RISK',
+          reason: `Send keyboard shortcut ${keys.join('+')}`
+        });
+      } else if (rawKeyExpr) {
+        actions.push({
+          id: `act_${Date.now()}_press`,
+          type: 'PRESS_KEY',
+          parameters: { key: rawKeyExpr.replace(/^esc$/, 'escape') },
+          confidence: 0.96,
+          riskLevel: 'LOW_RISK',
+          reason: `Press '${rawKeyExpr}' key`
+        });
+      }
     }
 
     // 5. Clicking specific element

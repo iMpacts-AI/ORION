@@ -16,6 +16,7 @@ import { TaskStateStore } from './TaskStateStore';
 import { TaskStateMachine } from './TaskStateMachine';
 import { ProcessSupervisor } from './ProcessSupervisor';
 import { WindowsAppResolver } from './WindowsAppResolver';
+import { ActionValidator } from '../ActionValidator';
 import { eventBus } from '../../../shared/events';
 import { execFile } from 'child_process';
 import * as path from 'path';
@@ -33,6 +34,7 @@ export class ComputerActionExecutor {
   private planner?: ComputerActionPlanner;
   private stateStore: TaskStateStore;
   private appResolver: WindowsAppResolver;
+  private actionValidator: ActionValidator = new ActionValidator();
   private activePlanLock: boolean = false;
   private maxTotalActions: number = 25;
   private maxPlanDurationMs: number = 60000;
@@ -259,7 +261,35 @@ export class ComputerActionExecutor {
 
     const isDryRun = isDryRunOverride ?? action.isDryRun ?? false;
 
-    // 1. Permission & Emergency Stop Evaluation (consumes single-use approval on live execution)
+    // 1. Permission & Emergency Stop Evaluation (preview check before schema validation so E-Stop/Policy reasons win, without consuming single-use approval on malformed schemas)
+    const permPreview = this.permissionService.evaluateActionPermission(action, { consumeApproval: false });
+    if (!permPreview.allowed) {
+      return {
+        actionId: action.id || 'invalid_action',
+        success: false,
+        preconditionsMet: false,
+        postconditionsVerified: false,
+        error: permPreview.reason || 'Action blocked by permission gate.',
+        timestamp: Date.now(),
+        executionTimeMs: Date.now() - startTime
+      };
+    }
+
+    // 1b. Typed Action Schema & Coordinate Bounds Validation
+    const schemaCheck = this.actionValidator.validateActionSchema(action);
+    if (!schemaCheck.valid) {
+      return {
+        actionId: action.id || 'invalid_action',
+        success: false,
+        preconditionsMet: false,
+        postconditionsVerified: false,
+        error: schemaCheck.reason || 'Action schema validation failed.',
+        timestamp: Date.now(),
+        executionTimeMs: Date.now() - startTime
+      };
+    }
+
+    // Consume single-use approval now that permission & schema both passed
     const perm = this.permissionService.evaluateActionPermission(action, { consumeApproval: !isDryRun });
     if (!perm.allowed) {
       return {
@@ -273,8 +303,28 @@ export class ComputerActionExecutor {
       };
     }
 
-    // 2. Initial Screen Observation
+    // 2. Initial Screen Observation & Precondition Gate
     const priorObservation = await this.screenUnderstanding.captureObservation();
+    if (!isDryRun && action.preconditions) {
+      const preCheck = await this.actionValidator.validatePreconditions(
+        action.preconditions,
+        undefined,
+        priorObservation
+      );
+      if (!preCheck.valid) {
+        return {
+          actionId: action.id,
+          success: false,
+          preconditionsMet: false,
+          postconditionsVerified: false,
+          observedState: priorObservation,
+          error: preCheck.reason || 'Action preconditions were not met.',
+          isDryRun,
+          timestamp: Date.now(),
+          executionTimeMs: Date.now() - startTime
+        };
+      }
+    }
 
     // 3. Action Execution via Subsystems
     let execSuccess = true;
@@ -437,29 +487,59 @@ export class ComputerActionExecutor {
             }
             break;
 
-          case 'MOUSE_MOVE':
-            const moveX = targetPoint ? targetPoint.x : action.parameters?.x || 960;
-            const moveY = targetPoint ? targetPoint.y : action.parameters?.y || 540;
+          case 'MOUSE_MOVE': {
+            const moveX = targetPoint ? targetPoint.x : (action.parameters?.x ?? 960);
+            const moveY = targetPoint ? targetPoint.y : (action.parameters?.y ?? 540);
             await this.inputControl.moveCursor(moveX, moveY);
+            action.parameters = {
+              ...(action.parameters || {}),
+              _targetCoordinates: { x: moveX, y: moveY },
+              _cursorVerification: await this.inputControl.verifyCursorPosition(moveX, moveY, 32)
+            };
             break;
+          }
 
-          case 'MOUSE_CLICK':
+          case 'MOUSE_CLICK': {
             const clickX = targetPoint ? targetPoint.x : action.parameters?.x;
             const clickY = targetPoint ? targetPoint.y : action.parameters?.y;
             await this.inputControl.click(clickX, clickY, action.parameters?.button || 'left');
+            if (typeof clickX === 'number' && typeof clickY === 'number') {
+              action.parameters = {
+                ...(action.parameters || {}),
+                _targetCoordinates: { x: clickX, y: clickY },
+                _cursorVerification: await this.inputControl.verifyCursorPosition(clickX, clickY, 32)
+              };
+            }
             break;
+          }
 
-          case 'MOUSE_DOUBLE_CLICK':
+          case 'MOUSE_DOUBLE_CLICK': {
             const dX = targetPoint ? targetPoint.x : action.parameters?.x;
             const dY = targetPoint ? targetPoint.y : action.parameters?.y;
             await this.inputControl.doubleClick(dX, dY);
+            if (typeof dX === 'number' && typeof dY === 'number') {
+              action.parameters = {
+                ...(action.parameters || {}),
+                _targetCoordinates: { x: dX, y: dY },
+                _cursorVerification: await this.inputControl.verifyCursorPosition(dX, dY, 32)
+              };
+            }
             break;
+          }
 
-          case 'MOUSE_RIGHT_CLICK':
+          case 'MOUSE_RIGHT_CLICK': {
             const rX = targetPoint ? targetPoint.x : action.parameters?.x;
             const rY = targetPoint ? targetPoint.y : action.parameters?.y;
             await this.inputControl.rightClick(rX, rY);
+            if (typeof rX === 'number' && typeof rY === 'number') {
+              action.parameters = {
+                ...(action.parameters || {}),
+                _targetCoordinates: { x: rX, y: rY },
+                _cursorVerification: await this.inputControl.verifyCursorPosition(rX, rY, 32)
+              };
+            }
             break;
+          }
 
           case 'SCROLL':
             await this.inputControl.scroll(action.parameters?.amount || -3);
@@ -468,6 +548,15 @@ export class ComputerActionExecutor {
           case 'DRAG':
             if (action.parameters?.from && action.parameters?.to) {
               await this.inputControl.drag(action.parameters.from, action.parameters.to);
+              action.parameters = {
+                ...(action.parameters || {}),
+                _targetCoordinates: { x: action.parameters.to.x, y: action.parameters.to.y },
+                _cursorVerification: await this.inputControl.verifyCursorPosition(
+                  action.parameters.to.x,
+                  action.parameters.to.y,
+                  32
+                )
+              };
             }
             break;
 

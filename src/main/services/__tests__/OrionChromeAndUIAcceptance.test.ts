@@ -545,11 +545,14 @@ async function runAcceptanceSuite() {
     console.log('\n=== ALL ACCEPTANCE TESTS (A - I) PASSED WITH 100% VERIFIED EVIDENCE ===');
   } finally {
     await browserProvider.close();
+    (server as any).closeAllConnections?.();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 }
 
-runAcceptanceSuite().catch((err) => {
-  console.error('[FAIL] OrionChromeAndUIAcceptance failed:', err);
-  process.exit(1);
-});
+runAcceptanceSuite()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error('[FAIL] OrionChromeAndUIAcceptance failed:', err);
+    process.exit(1);
+  });

@@ -82,8 +82,11 @@ async function runOrionCliRedesignAcceptance() {
       'Compact header displays genuine ORION wordmark, version v1.0.0, and Sovereign AI Operating Layer descriptor'
     );
     check(
-      plainStartup.includes('ollama:llama3.1:8b') && plainStartup.includes('core') && plainStartup.includes('4-Tier Protected'),
-      'Compact header displays configured model (ollama:llama3.1:8b), active agent (core), and 4-Tier Protected security status'
+      plainStartup.includes('ORION Local') &&
+        !plainStartup.includes('ollama:llama3.1:8b') &&
+        plainStartup.includes('core') &&
+        plainStartup.includes('4-Tier Protected'),
+      'Compact header displays provider-neutral ORION Local engine branding, active agent (core), and 4-Tier Protected security status'
     );
     check(
       !plainStartup.toLowerCase().includes('impact ai') && !plainStartup.toLowerCase().includes('impacts-ai'),

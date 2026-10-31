@@ -8,6 +8,11 @@ import { ExecutionTraceService } from '../main/services/ExecutionTraceService';
 import { OrionAgentId } from '../main/services/AgentPolicyService';
 import { ToolCall } from '../shared/types';
 import { WindowsNativeSTTProvider } from '../main/services/VoiceService';
+import {
+  formatDeveloperEngineDiagnostics,
+  formatLogicalPath,
+  resolvePublicEngineIdentity
+} from '../shared/branding/OrionEngineIdentity';
 
 export interface CommandDispatchResult {
   handled: boolean;
@@ -27,7 +32,8 @@ export class OrionCliCommandRouter {
       '/help', '/commands', '/system-stats', '/recent-tools', '/panel', '/close', '/apps',
       '/status', '/specs', '/providers', '/models', '/model', '/mode',
       '/init', '/attach', '/worktree', '/plan', '/goal', '/effort', '/subtask', '/loop',
-      '/review', '/security-review', '/simplify', '/test', '/undo', '/redo', '/rewind', '/vivid',
+      '/review', '/security-review', '/simplify', '/test', '/undo', '/redo', '/rewind',
+      '/vivid', '/animations', '/motion', '/tip', '/tips',
       '/agents', '/agent', '/tools', '/mcp', '/tasks', '/resume', '/remote', '/content',
       '/memory', '/context', '/history', '/notes', '/reminders', '/permissions',
       '/approve', '/deny', '/stop', '/config', '/doctor', '/bench', '/privacy',
@@ -211,6 +217,7 @@ export class OrionCliCommandRouter {
           return { handled: true, exitCode: 0 };
         }
 
+        const engineIdentity = resolvePublicEngineIdentity(routerStatus.id, routerStatus.currentModel);
         r.writeLine(`\n${r.bold('ORION Runtime & System Telemetry')}`);
         r.writeLine(`  • ${r.cyan('OS / Platform'.padEnd(20))}: ${os.platform()} ${os.release()} (${process.arch})`);
         r.writeLine(`  • ${r.cyan('CPU Model'.padEnd(20))}: ${snapshot.cpu.model} (${snapshot.cpu.cores.length} cores @ ${snapshot.cpu.usagePercent}% load)`);
@@ -218,7 +225,7 @@ export class OrionCliCommandRouter {
         r.writeLine(`  • ${r.cyan('Network'.padEnd(20))}: ${snapshot.network.interfaceName} (${snapshot.network.ipAddress})`);
         r.writeLine(`  • ${r.cyan('Uptime'.padEnd(20))}: ${(os.uptime() / 3600).toFixed(1)} hours`);
         r.writeLine(`  • ${r.cyan('Active Agent'.padEnd(20))}: ${activeAgent.displayName} (${activeAgent.id} | ceiling: ${activeAgent.maxPermissionLevel})`);
-        r.writeLine(`  • ${r.cyan('Active Provider'.padEnd(20))}: ${routerStatus.id} (${routerStatus.currentModel})`);
+        r.writeLine(`  • ${r.cyan('Active Engine'.padEnd(20))}: ${engineIdentity.publicLabel} (${engineIdentity.tierDescription})`);
         r.writeLine(`  • ${r.cyan('Routing Strategy'.padEnd(20))}: ${this.kernel.omniRouter.getRoutingStrategy()}`);
         r.writeLine(`  • ${r.cyan('Protected Policy'.padEnd(20))}: ${policyIntegrity.valid ? r.green('VERIFIED') : r.red('TAMPER_DETECTED (FAIL-SAFE)')} (${policyIntegrity.actualSha256.slice(0, 12)}...)`);
         r.writeLine(`  • ${r.cyan('Cloud/Local Adapters'.padEnd(20))}: ${configuredCount} configured / ${allProviders.length - 1} adapters (+1 offline fallback)`);
@@ -848,12 +855,15 @@ export class OrionCliCommandRouter {
           r.writeJson(cfg);
           return { handled: true, exitCode: 0 };
         }
+        const engineIdentity = resolvePublicEngineIdentity(cfg.activeProvider, cfg.activeModel);
+        const visualPrefs = this.kernel.visualPreferences.getPreferences();
         r.writeLine(`\n${r.bold('ORION Runtime Configuration')}`);
-        r.writeLine(`  • Project Root     : ${cfg.projectRoot}`);
+        r.writeLine(`  • Workspace        : ${formatLogicalPath(cfg.projectRoot, cfg.projectRoot)}`);
         r.writeLine(`  • Active Agent     : ${r.cyan(cfg.activeAgent)}`);
-        r.writeLine(`  • Active Provider  : ${cfg.activeProvider} (${cfg.activeModel})`);
+        r.writeLine(`  • Active Engine    : ${engineIdentity.publicLabel} (${engineIdentity.tierDescription})`);
+        r.writeLine(`  • Visual Mode      : ${visualPrefs.visualMode.toUpperCase()} | Animations: ${visualPrefs.animationsEnabled ? 'ON' : 'OFF'}`);
         r.writeLine(`  • Routing Strategy : ${cfg.routingStrategy}`);
-        r.writeLine(`  • Protected Policy : ${cfg.protectedPolicyPath} [${cfg.protectedPolicyVerified ? r.green('VERIFIED') : r.red('TAMPERED')}]`);
+        r.writeLine(`  • Protected Policy : ${formatLogicalPath(cfg.protectedPolicyPath, cfg.projectRoot)} [${cfg.protectedPolicyVerified ? r.green('VERIFIED') : r.red('TAMPERED')}]`);
         r.writeLine(`  • Local OpenAI API : http://${cfg.localApi.host}:${cfg.localApi.port}/v1 (${cfg.localApi.running ? 'RUNNING' : 'STOPPED'})\n`);
         return { handled: true, exitCode: 0 };
       }
@@ -1694,12 +1704,23 @@ export class OrionCliCommandRouter {
     const agents = this.kernel.agentSystem.getAllAgents();
     const apiStatus = this.kernel.localApiServer.getStatus();
 
+    const activeStatus = this.kernel.omniRouter.getStatus();
+    const engineDiagnostics = formatDeveloperEngineDiagnostics(
+      activeStatus.id,
+      activeStatus.currentModel
+    );
+
     const report = {
       status: policyIntegrity.valid && traceIntegrity.valid && tools.length >= 30 ? 'HEALTHY' : 'DEGRADED',
       nodeVersion: process.version,
       platform: `${os.platform()} ${os.release()} (${process.arch})`,
       cpuModel: snapshot.cpu.model,
       totalRamGb: Number((snapshot.memory.totalBytes / (1024 ** 3)).toFixed(2)),
+      engineMapping: {
+        publicIdentity: resolvePublicEngineIdentity(activeStatus.id, activeStatus.currentModel),
+        diagnosticsSummary: engineDiagnostics
+      },
+      visualPreferences: this.kernel.visualPreferences.getPreferences(),
       protectedPolicy: {
         ...policyIntegrity,
         verified: policyIntegrity.valid
@@ -1719,6 +1740,8 @@ export class OrionCliCommandRouter {
 
     r.writeLine(`\n${r.bold('=== ORION SYSTEM PRE-FLIGHT DIAGNOSTIC (/doctor) ===')}`);
     r.writeLine(`  • Node.js & OS         : ${r.green('[PASS]')} ${report.nodeVersion} on ${report.platform}`);
+    r.writeLine(`  • Engine Mapping       : ${r.cyan('[INFO]')} ${engineDiagnostics}`);
+    r.writeLine(`  • Visual & Motion      : ${r.green('[PASS]')} Mode=${report.visualPreferences.visualMode} | Animations=${report.visualPreferences.animationsEnabled ? 'enabled' : 'disabled'}`);
     r.writeLine(`  • Protected Policy     : ${policyIntegrity.valid ? r.green('[PASS]') : r.red('[FAIL]')} SHA-256 ${policyIntegrity.actualSha256.slice(0, 16)}...`);
     r.writeLine(`  • Trace Hash Chain     : ${traceIntegrity.valid ? r.green('[PASS]') : r.red('[FAIL]')} ${traceIntegrity.totalTraces} tamper-evident records`);
     r.writeLine(`  • Multi-Agent System   : ${r.green('[PASS]')} ${agents.length} specialized agents ready (active: ${this.kernel.agentSystem.getActiveAgentId()})`);
@@ -2427,7 +2450,7 @@ export class OrionCliCommandRouter {
       }
 
       r.writeLine(`\n${r.brand('◈ ORION Workspace Content & Documentation Manager (/content)')}`);
-      r.writeLine(`  • ${r.violet('Workspace Root'.padEnd(18))}: ${this.kernel.projectRoot}`);
+      r.writeLine(`  • ${r.violet('Workspace Root'.padEnd(18))}: ${formatLogicalPath(this.kernel.projectRoot, this.kernel.projectRoot)}`);
       r.writeLine(`  • ${r.violet('Top-Level Items'.padEnd(18))}: ${items.length} entries (${items.filter(i => i.isDirectory).length} dirs, ${items.filter(i => !i.isDirectory).length} files)`);
       r.writeLine(`  • ${r.violet('Documentation'.padEnd(18))}: ${docsCount} files in docs/`);
       r.writeLine(`  • ${r.violet('Saved Drafts'.padEnd(18))}: ${drafts.length} draft(s) in .orion_memory/drafts/`);
@@ -2950,6 +2973,8 @@ ${r.brand('◈ Contextual Panel: ORION CLI Command Reference')} ${r.dim('(/comma
 ${r.bold('Contextual Panels & Active Applications (On-Demand Views):')}
   ${r.cyan('/system-stats [close]')}           Open or close live CPU, RAM, Disk, Network & Uptime contextual panel
   ${r.cyan('/recent-tools [close]')}           Open or close recent tool executions, status badges & timing panel
+  ${r.cyan('/vivid [on|off]')} / ${r.cyan('/animations')}   Switch Vivid/Minimal visual mode or toggle decorative motion independently
+  ${r.cyan('/tip [next|prev|list]')}           Cycle through curated ORION tips (or press Alt+T on the home screen)
   ${r.cyan('/help [close]')} / ${r.cyan('/panel close')}    Open or close contextual panels and restore clean conversation layout
   ${r.cyan('/apps')} / ${r.cyan('/open <app>')}             Refresh Active Applications bar or launch a desktop application
 
