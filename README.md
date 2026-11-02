@@ -59,31 +59,51 @@ ORION is currently being developed for the **UAE Hackathon 2026 — Responsible 
 
 ## Progress
 
-Measured, not estimated — each score is *verified items ÷ planned items*, checked on a real machine.
+Honest numbers. Each score counts only what has been **seen working live on a real machine**, against
+everything ORION needs to do to fulfil its mission. Work that only runs on sample data counts as half.
+ORION is early — and we'd rather show you that than pretend otherwise.
 
 ```text
-Overall                      ███████████░░░░░░░░░  56%
+Overall                      ██████░░░░░░░░░░░░░░  29%
 
-Core engine & safety         █████████████████░░░  87%   13 of 15 core capabilities verified
-Everyday computer control    ██████████░░░░░░░░░░  50%    5 of 10 actions verified live
-Understanding people         ██████████░░░░░░░░░░  50%    2 of 4 (casual speech ✓  clarifying ✓  voice ·  Arabic ·)
-Works on every computer      █████░░░░░░░░░░░░░░░  25%    1 of 4 platforms fully verified
-Zero-Bureaucracy mission     █████████████░░░░░░░  67%    4 of 6 (intake ✓  checks ✓  approval ✓  documents ✓)
+Everyday computer control    ███████░░░░░░░░░░░░░  33%    5 of 15
+Understanding people         ██████░░░░░░░░░░░░░░  29%    2 of 7
+Safety & trust               ████████░░░░░░░░░░░░  38%    3 of 8
+Works on every computer      █████░░░░░░░░░░░░░░░  25%    2 of 8
+Zero-Bureaucracy mission     ████░░░░░░░░░░░░░░░░  20%    4 of 10 on sample data only
 ```
 
 <details>
-<summary><b>What's verified and what's next</b></summary>
+<summary><b>Exactly what's done and what isn't</b></summary>
 
-| Area | ✅ Verified | ⏳ Next |
-| :--- | :--- | :--- |
-| Everyday computer control | Opening apps · opening websites · web search · playing music · typing into apps | Brightness · volume · files · clicking inside apps · filling in forms |
-| Understanding people | Casual, everyday wording · asks when a request is unclear | Voice input · Arabic |
-| Works on every computer | Windows | macOS · Linux · ChromeOS (installers ready, testing in progress) |
-| Zero-Bureaucracy mission | Guided intake · automatic compliance checks · human approval gate · official documents | Live government services · testing with real users |
+**Everyday computer control — 5 of 15**
+✅ Open apps · ✅ Open websites · ✅ Web search · ✅ Play a song · ✅ Type into an app
+⬜ Brightness · ⬜ Volume · ⬜ Manage files · ⬜ Click buttons inside any app · ⬜ Fill in forms ·
+⬜ Read what's on screen · ⬜ Tasks across several apps · ⬜ Work in any installed app ·
+⬜ Recover from pop-ups & errors · ⬜ Change settings
+
+**Understanding people — 2 of 7**
+✅ Casual, everyday wording · ✅ Asks when a request is unclear
+⬜ Voice · ⬜ Arabic · ⬜ Several steps in one sentence · ⬜ Follow-ups ("do that again") ·
+⬜ Understands what's on screen
+
+**Safety & trust — 3 of 8**
+✅ Risky actions wait for approval · ✅ Checks its work before saying "done" · ✅ Tamper-evident action log
+⬜ Instant stop button (verified live) · ⬜ Cancel mid-task (verified live) · ⬜ Long multi-step tasks recover safely ·
+⬜ Memory across sessions · ⬜ Independent security review
+
+**Works on every computer — 2 of 8**
+✅ Windows: install · ✅ Windows: desktop control
+⬜ macOS / Linux / ChromeOS install (built, not yet tested) · ⬜ Desktop control on macOS / Linux / ChromeOS (not built)
+
+**Zero-Bureaucracy mission — 4 of 10, on sample data (counted as half)**
+◐ Guided intake · ◐ Automatic compliance checks · ◐ Human approval gate · ◐ Official documents
+⬜ A real government service end to end · ⬜ Secure login hand-off · ⬜ Arabic experience ·
+⬜ Privacy review of real data · ⬜ More than one service · ⬜ Tested with real users
 
 </details>
 
-<sub>Last measured: 2 November 2026.</sub>
+<sub>Last measured: 2 November 2026. Updated as each item is verified live.</sub>
 
 ## Install ORION
 
