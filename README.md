@@ -57,10 +57,38 @@ stops for a person to approve anything that matters.
 
 ORION is currently being developed for the **UAE Hackathon 2026 — Responsible AI / Smart Government track**.
 
+## Install ORION
+
+One command. Any computer.
+
+**Windows** — open PowerShell and paste:
+
+```powershell
+irm https://raw.githubusercontent.com/iMpacts-AI/ORION/main/install.ps1 | iex
+```
+
+**macOS · Linux · ChromeOS** — open Terminal and paste:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/iMpacts-AI/ORION/main/install.sh | bash
+```
+
+<sub>On a Chromebook, first turn on <b>Settings → About ChromeOS → Developers → Linux development environment</b>, then paste the command into the Linux terminal.</sub>
+
+Then open a new terminal and type **`orion`**. Try: `orion "open youtube"`
+
+The installer sets up everything it needs (including Node.js if it's missing), checks that the
+download is genuine before installing, and needs no admin password.
+
+| | Windows | macOS | Linux | ChromeOS |
+| :--- | :---: | :---: | :---: | :---: |
+| ORION terminal, chat & local AI | ✅ | ✅ | ✅ | ✅ |
+| Opening apps & websites, typing, music | ✅ | Coming soon | Coming soon | Coming soon |
+
 ## Status
 
-ORION is in active development and is not publicly released yet. It runs today on Windows, with
-broader platform support in progress. Live demos are available on request.
+ORION is in early access and under active development. Desktop control is Windows-first today,
+with more platforms on the way. Live demos are available on request.
 
 ## Talk to us
 
