@@ -57,6 +57,34 @@ stops for a person to approve anything that matters.
 
 ORION is currently being developed for the **UAE Hackathon 2026 — Responsible AI / Smart Government track**.
 
+## Progress
+
+Measured, not estimated — each score is *verified items ÷ planned items*, checked on a real machine.
+
+```text
+Overall                      ███████████░░░░░░░░░  56%
+
+Core engine & safety         █████████████████░░░  87%   13 of 15 core capabilities verified
+Everyday computer control    ██████████░░░░░░░░░░  50%    5 of 10 actions verified live
+Understanding people         ██████████░░░░░░░░░░  50%    2 of 4 (casual speech ✓  clarifying ✓  voice ·  Arabic ·)
+Works on every computer      █████░░░░░░░░░░░░░░░  25%    1 of 4 platforms fully verified
+Zero-Bureaucracy mission     █████████████░░░░░░░  67%    4 of 6 (intake ✓  checks ✓  approval ✓  documents ✓)
+```
+
+<details>
+<summary><b>What's verified and what's next</b></summary>
+
+| Area | ✅ Verified | ⏳ Next |
+| :--- | :--- | :--- |
+| Everyday computer control | Opening apps · opening websites · web search · playing music · typing into apps | Brightness · volume · files · clicking inside apps · filling in forms |
+| Understanding people | Casual, everyday wording · asks when a request is unclear | Voice input · Arabic |
+| Works on every computer | Windows | macOS · Linux · ChromeOS (installers ready, testing in progress) |
+| Zero-Bureaucracy mission | Guided intake · automatic compliance checks · human approval gate · official documents | Live government services · testing with real users |
+
+</details>
+
+<sub>Last measured: 2 November 2026.</sub>
+
 ## Install ORION
 
 One command. Any computer.
