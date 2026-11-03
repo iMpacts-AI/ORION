@@ -34,6 +34,7 @@ the way you'd say it to a friend — and ORION carries out the steps.
 > **"look up the best mechanical keyboards for me"** → Chrome opens with the results.
 > **"put on some Weeknd"** → the song starts playing.
 > **"open notepad and type my shopping list"** → done.
+> **"make a pdf about the benefits of reading"** → a finished, formatted PDF appears.
 
 No exact commands to memorise. No menus. Just say it.
 
@@ -64,9 +65,9 @@ everything ORION needs to do to fulfil its mission. Work that only runs on sampl
 ORION is early — and we'd rather show you that than pretend otherwise.
 
 ```text
-Overall                      ██████░░░░░░░░░░░░░░  29%
+Overall                      ██████░░░░░░░░░░░░░░  30%
 
-Everyday computer control    ███████░░░░░░░░░░░░░  33%    5 of 15
+Everyday computer control    ████████░░░░░░░░░░░░  38%    6 of 16
 Understanding people         ██████░░░░░░░░░░░░░░  29%    2 of 7
 Safety & trust               ████████░░░░░░░░░░░░  38%    3 of 8
 Works on every computer      █████░░░░░░░░░░░░░░░  25%    2 of 8
@@ -76,8 +77,8 @@ Zero-Bureaucracy mission     ████░░░░░░░░░░░░░
 <details>
 <summary><b>Exactly what's done and what isn't</b></summary>
 
-**Everyday computer control — 5 of 15**
-✅ Open apps · ✅ Open websites · ✅ Web search · ✅ Play a song · ✅ Type into an app
+**Everyday computer control — 6 of 16**
+✅ Open apps · ✅ Open websites · ✅ Web search · ✅ Play a song or video · ✅ Type into an app · ✅ Create documents (Word, PDF, Excel)
 ⬜ Brightness · ⬜ Volume · ⬜ Manage files · ⬜ Click buttons inside any app · ⬜ Fill in forms ·
 ⬜ Read what's on screen · ⬜ Tasks across several apps · ⬜ Work in any installed app ·
 ⬜ Recover from pop-ups & errors · ⬜ Change settings
@@ -103,7 +104,7 @@ Zero-Bureaucracy mission     ████░░░░░░░░░░░░░
 
 </details>
 
-<sub>Last measured: 2 November 2026. Updated as each item is verified live.</sub>
+<sub>Last measured: 3 November 2026. Updated as each item is verified live.</sub>
 
 ## Install ORION
 
