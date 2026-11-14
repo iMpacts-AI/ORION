@@ -6,7 +6,7 @@
 
 ### Most AI tells you *how* to do something. ORION actually does it — on your computer, with your permission, and proves it worked.
 
-[**Request a demo**](mailto:saqib@impacts-ai.com?subject=ORION%20demo) · [Project page](https://impacts-ai.com/orion) · [iMpacts-AI](https://github.com/iMpacts-AI)
+[**Request a demo**](mailto:saqib@impacts-ai.com?subject=ORION%20demo) · [**How to use ORION**](./GUIDE.md) · [Project page](https://impacts-ai.com/orion) · [iMpacts-AI](https://github.com/iMpacts-AI)
 
 <br />
 
@@ -125,6 +125,8 @@ curl -fsSL https://raw.githubusercontent.com/iMpacts-AI/ORION/main/install.sh | 
 <sub>On a Chromebook, first turn on <b>Settings → About ChromeOS → Developers → Linux development environment</b>, then paste the command into the Linux terminal.</sub>
 
 Then open a new terminal and type **`orion`**. Try: `orion "open youtube"`
+
+📖 **New to ORION? Read the [How to use ORION guide](./GUIDE.md).** It covers everyday requests, the computer agent, approvals and the emergency stop, and Government Journey mode.
 
 The installer sets up everything it needs (including Node.js if it's missing), checks that the
 download is genuine before installing, and needs no admin password.
