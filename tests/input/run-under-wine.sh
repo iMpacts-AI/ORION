@@ -48,18 +48,21 @@ if ! xdpyinfo -display "$DISPLAY_NUM" >/dev/null 2>&1; then
   sleep 2
 fi
 
-if [ ! -d "$WORK/mono/wine-mono-$MONO_VER" ]; then
-  echo "== wine-mono $MONO_VER"
-  mkdir -p "$WORK/mono"
-  curl -fsSL "https://github.com/wine-mono/wine-mono/releases/download/wine-mono-$MONO_VER/wine-mono-$MONO_VER-x86.tar.xz" | tar -xJ -C "$WORK/mono"
-fi
+# Install the detected version plus 9.4.0 (Wine 10's usual one); Wine picks the
+# one it was built for. Distro repacks do not always record it in appwiz.cpl.
+for v in $(printf '%s\n' "$MONO_VER" 9.4.0 | awk '!seen[$0]++'); do
+  if [ ! -d "$WORK/mono/wine-mono-$v" ]; then
+    echo "== wine-mono $v"
+    mkdir -p "$WORK/mono"
+    curl -fsSL "https://github.com/wine-mono/wine-mono/releases/download/wine-mono-$v/wine-mono-$v-x86.tar.xz" | tar -xJ -C "$WORK/mono" || echo "   (could not download $v)"
+  fi
+  if [ -d "$WORK/mono/wine-mono-$v" ] && [ ! -d "/usr/share/wine/mono/wine-mono-$v" ]; then
+    (sudo mkdir -p /usr/share/wine/mono && sudo cp -r "$WORK/mono/wine-mono-$v" /usr/share/wine/mono/) 2>/dev/null \
+      || { mkdir -p /usr/share/wine/mono && cp -r "$WORK/mono/wine-mono-$v" /usr/share/wine/mono/; }
+  fi
+done
 if [ ! -f "$WORK/prefix/system.reg" ]; then
   echo "== wine prefix"
-  # Wine looks for mono in /usr/share/wine/mono or next to the prefix's data dir
-  if [ ! -d /usr/share/wine/mono/wine-mono-$MONO_VER ]; then
-    (sudo mkdir -p /usr/share/wine/mono && sudo cp -r "$WORK/mono/wine-mono-$MONO_VER" /usr/share/wine/mono/) 2>/dev/null \
-      || { mkdir -p /usr/share/wine/mono && cp -r "$WORK/mono/wine-mono-$MONO_VER" /usr/share/wine/mono/; }
-  fi
   "$WORK/wine" wineboot -i >/dev/null 2>&1 || true
   # One virtual desktop so focus and cursor behave like a single Windows session
   "$WORK/wine" reg add 'HKCU\Software\Wine\Explorer' /v Desktop /d Default /f >/dev/null 2>&1
@@ -75,7 +78,13 @@ kill_wine() { env -i HOME="$HOME" PATH=/usr/bin:/bin WINEPREFIX="$WORK/prefix" w
 echo "== wine check"
 "$WORK/wine" --version || true
 "$WORK/wine" cmd /c echo wine-ok 2>&1 | tail -2 || true
-"$WORK/wine" "$WORK/helper/win32-native-input.exe" status 2>&1 | tail -3 || true
+if ! "$WORK/wine" "$WORK/helper/win32-native-input.exe" status 2>&1 | tee "$WORK/status.txt" | grep -q '^STATUS:'; then
+  echo "!! .NET programs do not start under this Wine. Wine's .NET loader says:"
+  tail -5 "$WORK/status.txt" || true
+  env -i HOME="$HOME" PATH=/usr/bin:/bin DISPLAY=$DISPLAY_NUM WINEPREFIX="$WORK/prefix" WINEDEBUG=err+all,+mscoree \
+    "$(command -v wine64 || echo /usr/lib/wine/wine64)" "$WORK/helper/win32-native-input.exe" status 2>&1 | grep -i -E 'mono|mscoree|err:' | head -25 || true
+  ls /usr/share/wine/mono 2>/dev/null || true
+fi
 export ORION_PROBE_STDERR="$WORK/probe.stderr"
 
 status=0
