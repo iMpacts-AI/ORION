@@ -18,7 +18,15 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 WORK="${ORION_WINE_WORK:-${TMPDIR:-/tmp}/orion-wine}"
 ORION_MJS="${1:-}"
 DISPLAY_NUM="${ORION_WINE_DISPLAY:-:97}"
-MONO_VER="8.1.0"   # wine-mono matching Wine 9.x
+# The wine-mono version this Wine build expects is recorded in its appwiz.cpl
+# (Wine 9.0 -> 8.1.0, Wine 10.0 -> a newer one). Read it instead of guessing.
+APPWIZ="$(find /usr/lib /usr/lib64 /opt -name appwiz.cpl -path '*x86_64-windows*' -print -quit 2>/dev/null || true)"
+MONO_VER=""
+if [ -n "$APPWIZ" ]; then
+  MONO_VER="$(grep -a -o -m1 'wine-mono-[0-9][0-9.]*[0-9]-x86\.msi' "$APPWIZ" | sed -n '1{s/wine-mono-//;s/-x86\.msi//;p}' || true)"
+fi
+MONO_VER="${MONO_VER:-8.1.0}"
+echo "== wine expects wine-mono $MONO_VER"
 mkdir -p "$WORK"
 
 # Wine is sensitive to some host environment variables (it aborted with
