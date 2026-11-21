@@ -1,0 +1,81 @@
+name: Multi-OS install + smoke test
+
+# Runs the real installers (install.sh / install.ps1 from this commit) against
+# the published release, then tests/smoke.mjs against the installed `orion`.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      orion_version:
+        description: 'Release tag to install (blank = latest)'
+        required: false
+        default: ''
+  schedule:
+    - cron: '17 4 * * 1'   # weekly, Monday 04:17 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: multi-os-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: ${{ matrix.label }} · Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15, macos-15-intel, windows-latest]
+        node: ['18', '22']
+        include:
+          - { os: ubuntu-latest,  label: 'Ubuntu x64' }
+          - { os: macos-15,       label: 'macOS arm64' }
+          - { os: macos-15-intel, label: 'macOS x64' }
+          - { os: windows-latest, label: 'Windows x64' }
+    env:
+      ORION_VERSION: ${{ inputs.orion_version }}
+      NO_COLOR: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install ORION (install.sh)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          ORION_INSTALL_DIR: ${{ runner.temp }}/orion/app
+          ORION_BIN_DIR: ${{ runner.temp }}/orion/bin
+        run: |
+          [ -n "$ORION_VERSION" ] || unset ORION_VERSION
+          bash ./install.sh
+          echo "$ORION_BIN_DIR" >> "$GITHUB_PATH"
+
+      - name: Install ORION (install.ps1, Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          if (-not $env:ORION_VERSION) { Remove-Item Env:ORION_VERSION -ErrorAction SilentlyContinue }
+          & .\install.ps1
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $env:LOCALAPPDATA 'orion-cli\bin')
+
+      - name: Smoke test
+        env:
+          ORION_SMOKE_REPORT: ${{ runner.temp }}/smoke-report.json
+        run: node tests/smoke.mjs
+
+      - name: Upload smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-${{ matrix.os }}-node${{ matrix.node }}
+          path: ${{ runner.temp }}/smoke-report.json
+          if-no-files-found: ignore
