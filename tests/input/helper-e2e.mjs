@@ -133,8 +133,10 @@ await test('mouse', 'middle click (450,300)', ['clickat', '450', '300', 'middle'
   ev => mouseAt(ev, 'MOUSEDOWN', 'Middle', 450, 300) || 'no middle down at 450,300');
 await test('mouse', 'double click is seen as a double click (400,300)', ['clickat', '400', '300', 'left', 'double'],
   ev => ev.some(e => e.startsWith('DOUBLECLICK|Left|400,300')) || 'no DOUBLECLICK event');
-await test('mouse', 'scroll down 3 notches', ['scroll', '-3'], ev => hasEvent(ev, 'WHEEL|-360|400,300') || ev.some(e => e.startsWith('WHEEL|-360')) || 'no WHEEL -360');
-await test('mouse', 'scroll up 2 notches', ['scroll', '2'], ev => ev.some(e => e.startsWith('WHEEL|240')) || 'no WHEEL 240');
+// Windows sends one wheel event per scroll call, X11 one per notch: compare the total.
+const wheel = ev => ev.filter(e => e.startsWith('WHEEL|')).reduce((n, e) => n + Number(e.split('|')[1]), 0);
+await test('mouse', 'scroll down 3 notches', ['scroll', '-3'], ev => wheel(ev) === -360 || `wheel total ${wheel(ev)}`);
+await test('mouse', 'scroll up 2 notches', ['scroll', '2'], ev => wheel(ev) === 240 || `wheel total ${wheel(ev)}`);
 await test('mouse', 'drag (200,200) -> (600,420)', ['drag', '200', '200', '600', '420'],
   ev => hasEvent(ev, 'DRAG|200,200->600,420') || 'no DRAG 200,200->600,420');
 await test('mouse', 'mousedown + mouseup as separate commands', ['mousedown', 'left'], ev => {

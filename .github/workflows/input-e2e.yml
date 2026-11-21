@@ -61,6 +61,79 @@ jobs:
             ${{ runner.temp }}/screen.png
           if-no-files-found: ignore
 
+  linux-x11:
+    name: Linux X11 (real X server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install X11 build deps + Xvfb
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libx11-dev libxtst-dev
+      - name: Build helper + probe
+        run: make -C native/linux-x11-input
+      - name: Keyboard + mouse end-to-end
+        env:
+          ORION_E2E_REPORT: ${{ runner.temp }}/linux-x11-e2e.json
+        run: |
+          Xvfb :99 -screen 0 1280x800x24 &
+          sleep 2
+          export DISPLAY=:99
+          native/linux-x11-input/build/orion-input-x11 status
+          node tests/input/helper-e2e.mjs --helper native/linux-x11-input/build/orion-input-x11 \
+            --probe native/linux-x11-input/build/input-probe-x11 --log "$RUNNER_TEMP/probe-x11.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: input-e2e-linux-x11
+          path: |
+            ${{ runner.temp }}/linux-x11-e2e.json
+            ${{ runner.temp }}/probe-x11.log
+          if-no-files-found: ignore
+
+  macos:
+    name: macOS (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, arch: arm64 }
+          - { os: macos-15-intel, arch: x64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build helper + probe
+        run: |
+          mkdir -p native/macos-input/build
+          swiftc -O -o native/macos-input/build/orion-input-macos native/macos-input/OrionInput.swift
+          swiftc -O -o native/macos-input/build/input-probe-macos native/macos-input/InputProbe.swift
+      - name: Helper status (Accessibility permission)
+        run: native/macos-input/build/orion-input-macos status
+      - name: Keyboard + mouse end-to-end
+        env:
+          ORION_E2E_REPORT: ${{ runner.temp }}/macos-e2e.json
+        run: |
+          node tests/input/helper-e2e.mjs --helper native/macos-input/build/orion-input-macos \
+            --probe native/macos-input/build/input-probe-macos --log "$RUNNER_TEMP/probe-macos.log"
+      - name: Screenshot on failure
+        if: failure()
+        run: screencapture -x "$RUNNER_TEMP/screen-macos.png" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: input-e2e-macos-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/macos-e2e.json
+            ${{ runner.temp }}/probe-macos.log
+            ${{ runner.temp }}/screen-macos.png
+          if-no-files-found: ignore
+
   wine:
     name: Linux + Wine (logic cross-check)
     runs-on: ubuntu-latest
