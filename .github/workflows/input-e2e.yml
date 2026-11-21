@@ -1,0 +1,186 @@
+name: Keyboard + mouse end-to-end
+
+# Proves ORION's keyboard and mouse control by checking what a real window
+# receives (tests/input). Runs on a real Windows desktop and, as a fast logic
+# cross-check, on Linux with the Windows helper under Wine.
+
+on:
+  push:
+    branches: [main]
+    paths: ['native/**', 'tests/input/**', 'tools/hotfix/**', '.github/workflows/input-e2e.yml']
+  pull_request:
+    paths: ['native/**', 'tests/input/**', 'tools/hotfix/**', '.github/workflows/input-e2e.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows (real desktop)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build helper + probe
+        run: |
+          dotnet build native/win32-native-input -c Release -o build/helper
+          dotnet build native/input-probe -c Release -o build/probe
+      - name: Helper end-to-end
+        env:
+          ORION_E2E_REPORT: ${{ runner.temp }}/helper-e2e.json
+        run: node tests/input/helper-e2e.mjs --helper build/helper/win32-native-input.exe --probe build/probe/input-probe.exe --log ${{ runner.temp }}\probe.log
+      - name: Install ORION v1.2.0 (for its JS input layer)
+        if: ${{ !cancelled() }}
+        shell: powershell
+        env:
+          ORION_VERSION: v1.2.0
+          ORION_NO_PATH: '1'
+        run: '& .\install.ps1'
+      - name: JS layer end-to-end (patched v1.2.0)
+        if: ${{ !cancelled() }}
+        env:
+          ORION_E2E_REPORT: ${{ runner.temp }}/js-e2e.json
+        shell: bash
+        run: |
+          node tools/hotfix/patch-input-v1.2.0.mjs "$LOCALAPPDATA/orion-cli/app/orion.mjs" build/orion.patched.mjs
+          node tests/input/js-driver-e2e.mjs --orion build/orion.patched.mjs --helper build/helper/win32-native-input.exe --probe build/probe/input-probe.exe --log "${{ runner.temp }}\\probe.log"
+      - name: Screenshot on failure
+        if: failure()
+        run: build/helper/win32-native-input.exe screenshot ${{ runner.temp }}\screen.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: input-e2e-windows
+          path: |
+            ${{ runner.temp }}/*.json
+            ${{ runner.temp }}/probe.log
+            ${{ runner.temp }}/screen.png
+          if-no-files-found: ignore
+
+  linux-x11:
+    name: Linux X11 (real X server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install X11 build deps + Xvfb
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libx11-dev libxtst-dev
+      - name: Build helper + probe
+        run: make -C native/linux-x11-input
+      - name: Keyboard + mouse end-to-end
+        env:
+          ORION_E2E_REPORT: ${{ runner.temp }}/linux-x11-e2e.json
+        run: |
+          Xvfb :99 -screen 0 1280x800x24 &
+          sleep 2
+          export DISPLAY=:99
+          native/linux-x11-input/build/orion-input-x11 status
+          node tests/input/helper-e2e.mjs --helper native/linux-x11-input/build/orion-input-x11 \
+            --probe native/linux-x11-input/build/input-probe-x11 --log "$RUNNER_TEMP/probe-x11.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: input-e2e-linux-x11
+          path: |
+            ${{ runner.temp }}/linux-x11-e2e.json
+            ${{ runner.temp }}/probe-x11.log
+          if-no-files-found: ignore
+
+  macos:
+    name: macOS (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, arch: arm64 }
+          - { os: macos-15-intel, arch: x64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build helper + probe
+        run: |
+          mkdir -p native/macos-input/build
+          swiftc -O -o native/macos-input/build/orion-input-macos native/macos-input/OrionInput.swift
+          swiftc -O -o native/macos-input/build/input-probe-macos native/macos-input/InputProbe.swift
+      - name: Helper status (Accessibility permission)
+        run: native/macos-input/build/orion-input-macos status
+      - name: Keyboard + mouse end-to-end
+        env:
+          ORION_E2E_REPORT: ${{ runner.temp }}/macos-e2e.json
+        run: |
+          node tests/input/helper-e2e.mjs --helper native/macos-input/build/orion-input-macos \
+            --probe native/macos-input/build/input-probe-macos --log "$RUNNER_TEMP/probe-macos.log"
+      - name: Install ORION v1.2.0, apply the hot-fix, add the macOS helper
+        if: ${{ !cancelled() }}
+        env:
+          ORION_VERSION: v1.2.0
+          ORION_INSTALL_DIR: ${{ runner.temp }}/orion/app
+          ORION_BIN_DIR: ${{ runner.temp }}/orion/bin
+        run: |
+          bash ./install.sh
+          node tools/hotfix/patch-input-v1.2.0.mjs "$ORION_INSTALL_DIR/orion.mjs" "$ORION_INSTALL_DIR/orion.mjs"
+          cp native/macos-input/build/orion-input-macos "$ORION_INSTALL_DIR/bin/"
+      - name: ORION JS input layer end-to-end (macOS code paths)
+        if: ${{ !cancelled() }}
+        env:
+          ORION_E2E_REPORT: ${{ runner.temp }}/macos-js-e2e.json
+        run: |
+          node tests/input/js-driver-e2e.mjs --native --orion "$RUNNER_TEMP/orion/app/orion.mjs" \
+            --helper native/macos-input/build/orion-input-macos --probe native/macos-input/build/input-probe-macos \
+            --log "$RUNNER_TEMP/probe-macos-js.log"
+      - name: Apps, windows, accessibility and ORION itself
+        if: ${{ !cancelled() }}
+        env:
+          ORION_E2E_REPORT: ${{ runner.temp }}/macos-apps-e2e.json
+        run: |
+          node tests/input/macos-apps-e2e.mjs --helper native/macos-input/build/orion-input-macos \
+            --probe native/macos-input/build/input-probe-macos --log "$RUNNER_TEMP/probe-macos-apps.log" \
+            --orion "$RUNNER_TEMP/orion/app/orion.mjs"
+      - name: Screenshot on failure
+        if: failure()
+        run: screencapture -x "$RUNNER_TEMP/screen-macos.png" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: input-e2e-macos-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/macos-*.json
+            ${{ runner.temp }}/probe-macos*.log
+            ${{ runner.temp }}/screen-macos.png
+          if-no-files-found: ignore
+
+  wine:
+    name: Linux + Wine (logic cross-check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install Xvfb + Wine
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb x11-utils wine64 wine
+      - name: Install ORION v1.2.0 (for its JS input layer)
+        env:
+          ORION_VERSION: v1.2.0
+          ORION_INSTALL_DIR: ${{ runner.temp }}/orion/app
+          ORION_BIN_DIR: ${{ runner.temp }}/orion/bin
+        run: bash ./install.sh
+      - name: Keyboard + mouse end-to-end under Wine
+        env:
+          ORION_WINE_WORK: ${{ runner.temp }}/wine
+        run: tests/input/run-under-wine.sh "${{ runner.temp }}/orion/app/orion.mjs"
