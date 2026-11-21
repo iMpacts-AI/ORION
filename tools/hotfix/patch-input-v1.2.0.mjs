@@ -133,6 +133,11 @@ const PATCHES = [
     find: 'if(e.verifyActiveApp&&r){let i=e.verifyActiveApp.toLowerCase(),',
     replace: 'if(e.verifyActiveApp&&r){let i=__orionExpectApp(e.verifyActiveApp.toLowerCase()),',
   },
+  {
+    id: 'MAC11 open-app / focus-window check: on macOS also accept the Mac app for a Windows name (notepad -> TextEdit)',
+    find: 'a=Array.from(new Set([n,s,...o].filter(Boolean)));if(a.length===0)return{verified:!1,confidence:.1,reason:`Cannot verify ${e.',
+    replace: 'a=Array.from(new Set([n,s,...o,...[n,s,...o].map(__orionExpectApp)].filter(Boolean)));if(a.length===0)return{verified:!1,confidence:.1,reason:`Cannot verify ${e.',
+  },
 ];
 
 let src = fs.readFileSync(inPath, 'utf8');

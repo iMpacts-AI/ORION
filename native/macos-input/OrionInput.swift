@@ -470,7 +470,15 @@ case "drag":
     if !ok { code = 3 }
 case "scroll":
     let n = Int32(arg(0).flatMap { Int($0) } ?? -3)
-    post(CGEvent(scrollWheelEvent2Source: src, units: .line, wheelCount: 1, wheel1: n, wheel2: 0, wheel3: 0))
+    // One event per notch (like a real wheel): a single multi-line event was
+    // occasionally dropped or coalesced to nothing.
+    let at = currentPos()
+    for _ in 0..<abs(n) {
+        let e = CGEvent(scrollWheelEvent2Source: src, units: .line, wheelCount: 1, wheel1: n > 0 ? 1 : -1, wheel2: 0, wheel3: 0)
+        e?.location = at
+        post(e)
+        msleep(15)
+    }
     out("SCROLL_OK:\(n)")
 case "typeunicode":
     guard let b = arg(0), let data = Data(base64Encoded: b), let s = String(data: data, encoding: .utf8) else { out("ERR_INVALID_ARGS: typeunicode requires <base64>"); code = 2; break }
@@ -521,7 +529,12 @@ case "launch":
         out("LAUNCH_NOT_FOUND:'\(target)' is not installed (looked for '\(app)')"); code = 8; break
     }
     let want = app.lowercased()
-    if let f = waitFront({ ($0.localizedName ?? "").lowercased().contains(want) || want.contains(($0.localizedName ?? "~").lowercased()) }, ms: 8000) {
+    let isWanted: (NSRunningApplication) -> Bool = { ($0.localizedName ?? "").lowercased().contains(want) || want.contains(($0.localizedName ?? "~").lowercased()) }
+    // Cold starts on slow machines can take well over 8 s. If the app is
+    // running but another window kept the front, bring it forward ourselves.
+    var f = waitFront(isWanted, ms: 15000)
+    if f == nil, let r = runningApp(matching: app), focusApp(r) { f = NSWorkspace.shared.frontmostApplication }
+    if let f = f, isWanted(f) {
         out("LAUNCH_OK:\(f.localizedName ?? app)|PID:\(f.processIdentifier)|FRONT:True|\(foregroundInfo())")
     } else if let r = runningApp(matching: app) {
         out("LAUNCH_UNVERIFIED:\(r.localizedName ?? app) is running but not in front|PID:\(r.processIdentifier)|\(foregroundInfo())"); code = 3

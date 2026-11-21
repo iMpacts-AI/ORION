@@ -106,8 +106,12 @@ final class ProbeView: NSView {
     override func scrollWheel(with e: NSEvent) {
         let (x, y) = globalTopLeft(e)
         // line-based wheel events: deltaY is in lines; 120 per notch like Windows
-        let lines = e.hasPreciseScrollingDeltas ? e.scrollingDeltaY / 10 : e.deltaY
-        let d = Int((lines * 120).rounded())
+        // Line wheel events carry the notch count in deltaY; some paths only fill
+        // scrollingDeltaY. Use whichever is set: one notch = 120 like Windows.
+        var lines = e.deltaY
+        if lines == 0 { lines = e.hasPreciseScrollingDeltas ? e.scrollingDeltaY / 10 : e.scrollingDeltaY }
+        if lines != 0 && abs(lines) < 1 { lines = lines > 0 ? 1 : -1 }
+        let d = Int((lines.rounded()) * 120)
         if d != 0 { W("WHEEL|\(d)|\(x),\(y)") }
     }
 }
