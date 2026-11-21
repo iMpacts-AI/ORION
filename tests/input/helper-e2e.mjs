@@ -71,7 +71,7 @@ async function test(group, name, args, check, env) {
   if (probeErr) console.log(`  [probe] ${probeErr}`);
   let ok = false, why = '';
   try {
-    const v = check(ev, r);
+    const v = await check(ev, r);
     ok = v === true || v === undefined;
     if (typeof v === 'string') { ok = false; why = v; }
   } catch (e) { why = e.message; }
@@ -139,9 +139,9 @@ await test('mouse', 'scroll down 3 notches', ['scroll', '-3'], ev => wheel(ev) =
 await test('mouse', 'scroll up 2 notches', ['scroll', '2'], ev => wheel(ev) === 240 || `wheel total ${wheel(ev)}`);
 await test('mouse', 'drag (200,200) -> (600,420)', ['drag', '200', '200', '600', '420'],
   ev => hasEvent(ev, 'DRAG|200,200->600,420') || 'no DRAG 200,200->600,420');
-await test('mouse', 'mousedown + mouseup as separate commands', ['mousedown', 'left'], ev => {
+await test('mouse', 'mousedown + mouseup as separate commands', ['mousedown', 'left'], async ev => {
   const up = helper(['mouseup', 'left']);
-  const after = newEvents();
+  const after = await settle();
   return (ev.some(e => e.startsWith('MOUSEDOWN|Left')) && after.some(e => e.startsWith('MOUSEUP|Left'))) || `down=${JSON.stringify(ev)} up=${up.out} ${JSON.stringify(after)}`;
 });
 
@@ -206,9 +206,9 @@ await test('safety', 'focus guard: drag is refused too', ['drag', '200', '200', 
   (ev, r) => (r.code === 13 && ev.length === 0) || `exit ${r.code}, events ${JSON.stringify(ev)}`, { ORION_EXPECT_HWND: '1' });
 await test('safety', 'focus guard: correct window → input goes through', ['typeunicode', b64('ok')],
   ev => chars(ev) === 'ok' || `typed ${JSON.stringify(chars(ev))}`, { ORION_EXPECT_HWND: HWND });
-await test('safety', 'releaseall lifts a stuck Ctrl', ['keydown', 'ctrl'], ev => {
+await test('safety', 'releaseall lifts a stuck Ctrl', ['keydown', 'ctrl'], async ev => {
   const r = helper(['releaseall']);
-  const after = newEvents();
+  const after = await settle();
   return (/RELEASEALL_OK:[1-9]/.test(r.out) && after.some(e => e === 'KEYUP|ControlKey')) || `releaseall=${r.out} events=${JSON.stringify(after)}`;
 });
 

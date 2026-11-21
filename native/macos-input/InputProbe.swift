@@ -25,9 +25,13 @@ log.seekToEndOfFile()
 func W(_ s: String) { log.write((s + "\n").data(using: .utf8)!) }
 
 let primaryHeight = NSScreen.screens.first?.frame.height ?? 900
+// Where the event happened (not where the cursor is now: by the time an event
+// is handled the cursor may already have moved on, e.g. during a drag).
 func globalTopLeft(_ e: NSEvent) -> (Int, Int) {
-    let p = NSEvent.mouseLocation  // bottom-left origin
-    _ = e
+    var p = NSEvent.mouseLocation
+    if let w = e.window {
+        p = w.convertToScreen(NSRect(origin: e.locationInWindow, size: .zero)).origin  // bottom-left origin
+    }
     return (Int(p.x.rounded()), Int((primaryHeight - p.y).rounded()))
 }
 func tf(_ b: Bool) -> String { b ? "True" : "False" }

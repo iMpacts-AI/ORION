@@ -41,7 +41,9 @@ func frontWindow() -> Front {
         for w in list {
             let owner = (w[kCGWindowOwnerPID as String] as? Int32) ?? -1
             let layer = (w[kCGWindowLayer as String] as? Int) ?? -1
-            if owner == pid && layer == 0 {
+            // The list is front-to-back. Accept any app level below the menu
+            // bar (24): floating panels and always-on-top windows count too.
+            if owner == pid && layer >= 0 && layer < 24 {
                 win = (w[kCGWindowNumber as String] as? Int) ?? 0
                 title = (w[kCGWindowName as String] as? String) ?? ""
                 break
