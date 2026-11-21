@@ -84,7 +84,9 @@ let offset = 0;
 const newEvents = () => { const a = fs.existsSync(LOG) ? fs.readFileSync(LOG, 'utf8') : ''; const c = a.slice(offset); offset = a.length; return c.split(/\r?\n/).filter(Boolean); };
 async function settle(max = 2500) { const ev = []; let q = 0; for (let t = 0; t < max && q < 250; t += 50) { await sleep(50); const n = newEvents(); if (n.length) { ev.push(...n); q = 0; } else q += 50; } return ev; }
 const chars = ev => ev.filter(e => e.startsWith('CHAR|')).map(e => String.fromCharCode(parseInt(e.split('|')[1].slice(2), 16))).join('');
-const kd = (ev, k) => ev.find(e => e.startsWith(`KEYDOWN|${k}|`));
+// .NET names some keys differently per runtime (Windows: Return / Next, Mono: Enter / PageDown); same key code.
+const KEY_ALIASES = { Enter: ['Enter', 'Return'], PageUp: ['PageUp', 'Prior'] };
+const kd = (ev, k) => ev.find(e => (KEY_ALIASES[k] || [k]).some(n => e.startsWith(`KEYDOWN|${n}|`)));
 
 fs.rmSync(LOG, { force: true });
 const [pc, pa] = run(PROBE, [LOG_ARG, '100', '100', '800', '500']);

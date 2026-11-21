@@ -87,7 +87,10 @@ function noTextTyped(ev, forbidden) {
   return c.length === 0 || `typed text "${c}" (expected only the shortcut${forbidden ? `, never "${forbidden}"` : ''})`;
 }
 function chord(ev, keyName, mods) {
-  const kd = keydowns(ev).find(e => e.split('|')[1] === keyName);
+  // .NET names some keys differently per runtime (Windows: Return / Next, Mono: Enter / PageDown); same key code.
+  const ALIASES = { Enter: ['Enter', 'Return'], Next: ['Next', 'PageDown'], PageUp: ['PageUp', 'Prior'], Back: ['Back'] };
+  const names = ALIASES[keyName] || [keyName];
+  const kd = keydowns(ev).find(e => names.includes(e.split('|')[1]));
   if (!kd) return `no KEYDOWN for ${keyName}; got ${JSON.stringify(keydowns(ev))}`;
   for (const [m, want] of Object.entries(mods)) {
     if (!kd.includes(`${m}:${want ? 'True' : 'False'}`)) return `${keyName} arrived with wrong modifiers: ${kd}`;
