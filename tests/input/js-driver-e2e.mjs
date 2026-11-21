@@ -153,7 +153,9 @@ await test('hotkey ["ctrl","k","c"] is refused, not silently sent as Ctrl+K', ()
 console.log('\nWindowsNativeInputDriver (cm: execute_action, drag, scroll)');
 await test('mouseMove + click right (700,450)', async () => { await driver.mouseMove(700, 450, false); await driver.mouseClick('right'); },
   ev => ev.some(e => e.startsWith('MOUSEDOWN|Right|700,450')) || 'no right click at 700,450');
-await test('scroll -2', () => driver.scroll(-2), ev => ev.some(e => e.startsWith('WHEEL|-240')) || 'no wheel -240');
+// Windows sends one wheel event per call; macOS and X11 one per notch. Compare the total.
+const wheelTotal = ev => ev.filter(e => e.startsWith('WHEEL|')).reduce((n, e) => n + Number(e.split('|')[1]), 0);
+await test('scroll -2', () => driver.scroll(-2), ev => wheelTotal(ev) === -240 || `wheel total ${wheelTotal(ev)}`);
 await test('drag (200,200)->(600,420) via helper', () => driver.drag({ x: 200, y: 200 }, { x: 600, y: 420 }),
   (ev, err) => (ev.includes('DRAG|200,200->600,420') && psCalls() === 0) || `err=${err?.message}`);
 await test('typeText unicode', () => driver.typeText('naïve 😀'), ev => chars(ev) === 'naïve 😀' || `typed ${JSON.stringify(chars(ev))}`);
