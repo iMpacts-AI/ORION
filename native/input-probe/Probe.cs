@@ -9,6 +9,8 @@
 using System;
 using System.Drawing;
 using System.IO;
+using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 
 public class ProbeForm : Form
@@ -19,7 +21,7 @@ public class ProbeForm : Form
 
     public ProbeForm(string path, Rectangle r)
     {
-        log = new StreamWriter(path, true) { AutoFlush = true };
+        log = new StreamWriter(path, true, new UTF8Encoding(false, false)) { AutoFlush = true };
         Text = "ORION Input Probe";
         StartPosition = FormStartPosition.Manual;
         FormBorderStyle = FormBorderStyle.None;
@@ -50,7 +52,9 @@ public class ProbeForm : Form
     protected override void OnKeyUp(KeyEventArgs e) { W("KEYUP|" + e.KeyCode); }
     protected override void OnKeyPress(KeyPressEventArgs e)
     {
-        W("CHAR|U+" + ((int)e.KeyChar).ToString("X4") + "|" + (char.IsControl(e.KeyChar) ? "" : e.KeyChar.ToString()));
+        char c = e.KeyChar;
+        bool printable = !char.IsControl(c) && !char.IsSurrogate(c);
+        W("CHAR|U+" + ((int)c).ToString("X4") + "|" + (printable ? c.ToString() : ""));
     }
     protected override void OnMouseDown(MouseEventArgs e)
     {
@@ -93,6 +97,11 @@ public class ProbeForm : Form
         var r = args.Length >= 5
             ? new Rectangle(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), int.Parse(args[4]))
             : new Rectangle(100, 100, 800, 500);
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (s, e) =>
+        {
+            try { File.AppendAllText(args[0], "PROBE_ERROR|" + e.Exception.GetType().Name + ": " + e.Exception.Message.Replace("\n", " ") + Environment.NewLine); } catch { }
+        };
         Application.EnableVisualStyles();
         Application.Run(new ProbeForm(args[0], r));
         return 0;

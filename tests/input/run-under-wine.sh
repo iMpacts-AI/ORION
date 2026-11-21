@@ -64,6 +64,12 @@ printf '#!/bin/sh\nexec "%s" "%s" "$@"\n' "$WORK/wine" "$WORK/helper/win32-nativ
 chmod +x "$WORK/helper.sh"
 kill_wine() { env -i HOME="$HOME" PATH=/usr/bin:/bin WINEPREFIX="$WORK/prefix" wineserver -k 2>/dev/null || true; sleep 1; }
 
+echo "== wine check"
+"$WORK/wine" --version || true
+"$WORK/wine" cmd /c echo wine-ok 2>&1 | tail -2 || true
+"$WORK/wine" "$WORK/helper/win32-native-input.exe" status 2>&1 | tail -3 || true
+export ORION_PROBE_STDERR="$WORK/probe.stderr"
+
 status=0
 echo "== helper end-to-end"
 kill_wine

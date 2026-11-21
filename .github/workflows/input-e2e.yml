@@ -34,12 +34,14 @@ jobs:
           ORION_E2E_REPORT: ${{ runner.temp }}/helper-e2e.json
         run: node tests/input/helper-e2e.mjs --helper build/helper/win32-native-input.exe --probe build/probe/input-probe.exe --log ${{ runner.temp }}\probe.log
       - name: Install ORION v1.2.0 (for its JS input layer)
+        if: ${{ !cancelled() }}
         shell: powershell
         env:
           ORION_VERSION: v1.2.0
           ORION_NO_PATH: '1'
         run: '& .\install.ps1'
       - name: JS layer end-to-end (patched v1.2.0)
+        if: ${{ !cancelled() }}
         env:
           ORION_E2E_REPORT: ${{ runner.temp }}/js-e2e.json
         shell: bash

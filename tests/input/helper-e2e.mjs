@@ -67,6 +67,8 @@ async function test(group, name, args, check, env) {
   newEvents(); // discard anything stray
   const r = helper(args, env);
   const ev = await settle();
+  const probeErr = ev.find(e => e.startsWith('PROBE_ERROR|'));
+  if (probeErr) console.log(`  [probe] ${probeErr}`);
   let ok = false, why = '';
   try {
     const v = check(ev, r);
@@ -96,13 +98,18 @@ function chord(ev, keyName, mods) {
 // ------------------------------------------------------------------ start probe
 fs.rmSync(LOG, { force: true });
 const [pc, pa] = cmdline(PROBE, [LOG_ARG, '100', '100', '800', '500']);
-const probe = spawn(pc, pa, { stdio: 'ignore', detached: true });
+const probeErr = process.env.ORION_PROBE_STDERR ? fs.openSync(process.env.ORION_PROBE_STDERR, 'a') : 'ignore';
+const probe = spawn(pc, pa, { stdio: ['ignore', probeErr, probeErr], detached: true });
 let ready = '';
-for (let i = 0; i < 60 && !ready; i++) {
+for (let i = 0; i < 180 && !ready; i++) {
   await sleep(500);
   ready = newEvents().find(l => l.startsWith('READY|')) || '';
 }
-if (!ready) { console.error('probe window never became ready'); process.exit(1); }
+if (!ready) {
+  console.error('probe window never became ready');
+  if (process.env.ORION_PROBE_STDERR && fs.existsSync(process.env.ORION_PROBE_STDERR)) console.error(fs.readFileSync(process.env.ORION_PROBE_STDERR, 'utf8').slice(-3000));
+  process.exit(1);
+}
 const HWND = ready.match(/HWND:(\d+)/)[1];
 console.log(`\nORION input helper end-to-end test — probe ${ready}\n`);
 helper(['setpos', '500', '350']);

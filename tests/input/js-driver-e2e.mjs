@@ -88,10 +88,15 @@ const kd = (ev, k) => ev.find(e => e.startsWith(`KEYDOWN|${k}|`));
 
 fs.rmSync(LOG, { force: true });
 const [pc, pa] = run(PROBE, [LOG_ARG, '100', '100', '800', '500']);
-const probe = spawn(pc, pa, { stdio: 'ignore', detached: true });
+const probeErr = process.env.ORION_PROBE_STDERR ? fs.openSync(process.env.ORION_PROBE_STDERR, 'a') : 'ignore';
+const probe = spawn(pc, pa, { stdio: ['ignore', probeErr, probeErr], detached: true });
 let ready = '';
-for (let i = 0; i < 60 && !ready; i++) { await sleep(500); ready = newEvents().find(l => l.startsWith('READY|')) || ''; }
-if (!ready) { console.error('probe never ready'); process.exit(1); }
+for (let i = 0; i < 180 && !ready; i++) { await sleep(500); ready = newEvents().find(l => l.startsWith('READY|')) || ''; }
+if (!ready) {
+  console.error('probe never ready');
+  if (process.env.ORION_PROBE_STDERR && fs.existsSync(process.env.ORION_PROBE_STDERR)) console.error(fs.readFileSync(process.env.ORION_PROBE_STDERR, 'utf8').slice(-3000));
+  process.exit(1);
+}
 
 // Fake PowerShell: records any fallback attempt. Fallbacks must NOT happen while the helper works.
 const psLog = path.join(os.tmpdir(), `orion-fake-ps-${process.pid}.log`);
