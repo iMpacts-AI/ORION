@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // =============================================================================
-// Hot-fix for ORION v1.2.0 keyboard + mouse control (orion.mjs side).
+// Hot-fix for ORION v1.2.0 keyboard + mouse control (orion.mjs side), plus
+// macOS wiring: input, real window info, app launch and the accessibility
+// tree through native/macos-input (and the Linux X11 helper where it applies).
 //
 //   node tools/hotfix/patch-input-v1.2.0.mjs <orion.mjs in> <orion.mjs out>
 //
@@ -57,7 +59,7 @@ const PATCHES = [
   {
     id: 'M1 drag: one helper call that presses, moves in steps and always releases',
     find: 'async drag(e,r){await this.mouseMove(e.x,e.y),',
-    replace: `async drag(e,r){if(process.platform==="win32"){let x=this.resolveExe();if(x)try{await Oi(x,["drag",String(Math.round(e.x)),String(Math.round(e.y)),String(Math.round(r.x)),String(Math.round(r.y))],{timeout:8e3});return}catch(q){if(${RAN('q')})throw new kn("drag",String(q.stdout).trim())}}await this.mouseMove(e.x,e.y),`,
+    replace: `async drag(e,r){{let x=this.resolveExe();if(x)try{await Oi(x,["drag",String(Math.round(e.x)),String(Math.round(e.y)),String(Math.round(r.x)),String(Math.round(r.y))],{timeout:8e3});return}catch(q){if(${RAN('q')})throw new kn("drag",String(q.stdout).trim())}}await this.mouseMove(e.x,e.y),`,
   },
   {
     id: 'M4 mouseMove: remember where ORION put the cursor',
@@ -78,6 +80,58 @@ const PATCHES = [
     id: 'K2 scroll: no PowerShell scroll after the helper refused',
     find: 'await Oi(i,["scroll",String(e)],{timeout:2e3});return}catch(n){r=n?.message||String(n)}',
     replace: `await Oi(i,["scroll",String(e)],{timeout:2e3});return}catch(n){if(${RAN('n')})throw new kn("scroll",String(n.stdout).trim());r=n?.message||String(n)}`,
+  },
+
+  // ---------------------------------------------------------------- macOS (+ Linux) wiring
+  {
+    id: 'MAC1 native helper lookup: bin/orion-input-macos on macOS, bin/orion-input-x11 on Linux; shared async runner',
+    find: 'function ac(){let t=process.env.ORION_INSTALL_ROOT?Aa.resolve(process.env.ORION_INSTALL_ROOT):"",e=[',
+    replace: 'var __orionMacApps={notepad:"textedit",wordpad:"textedit",calc:"calculator",explorer:"finder",cmd:"terminal",powershell:"terminal",wt:"terminal",control:"system settings",settings:"system settings","ms-settings":"system settings",paint:"preview",mspaint:"preview",snippingtool:"screenshot",taskmgr:"activity monitor",edge:"microsoft edge",msedge:"microsoft edge",chrome:"google chrome",vscode:"code",code:"code",word:"microsoft word",winword:"microsoft word",excel:"microsoft excel",powerpoint:"microsoft powerpoint",powerpnt:"microsoft powerpoint",outlook:"microsoft outlook",onenote:"microsoft onenote",teams:"microsoft teams"};function __orionExpectApp(a){return process.platform==="darwin"&&__orionMacApps[a]||a}function __orionNativeAsync(a,t=8e3){let n=ac();return n?new Promise(r=>require("child_process").execFile(n,a,{timeout:t,maxBuffer:4194304,windowsHide:!0},(x,o)=>r({stdout:String(o||x?.stdout||""),code:x?(typeof x.code=="number"?x.code:1):0}))):Promise.resolve(null)}function ac(){let t=process.env.ORION_INSTALL_ROOT?Aa.resolve(process.env.ORION_INSTALL_ROOT):"";if(process.platform!=="win32"){let m=process.platform==="darwin"?"orion-input-macos":"orion-input-x11";for(let c of[...(t?[Aa.join(t,"bin",m)]:[]),Aa.join(__dirname,"bin",m)])if(Zne.existsSync(c))return c;return null}let e=[',
+  },
+  {
+    id: 'MAC2 input driver: allowed on macOS/Linux when the native helper is installed',
+    find: 'assertWin32Platform(e){if(process.platform!=="win32")throw',
+    replace: 'assertWin32Platform(e){if(process.platform!=="win32"&&!ac())throw',
+  },
+  {
+    id: 'MAC3 computer.input (verified input used by the agent): run the macOS/Linux helper too',
+    find: 'if(!n||process.platform!=="win32")return{stdout:"ERR_UNAVAILABLE:native input helper not found"',
+    replace: 'if(!n)return{stdout:"ERR_UNAVAILABLE:native input helper not found"',
+  },
+  {
+    id: 'MAC4 active window: ask the OS (helper "foreground") instead of the hardcoded "ORION AI Command Shell / Electron"',
+    find: 'vv=class{async getActiveWindow(){if(process.platform==="win32")try{',
+    replace: 'vv=class{async getActiveWindow(){if(process.platform!=="win32"){let q=await __orionNativeAsync(["foreground"],3e3),m=q&&q.stdout.match(/HWND:(\\d+)\\|PID:(\\d+)\\|PROCESS:([^|]*)\\|TITLE:([^|\\r\\n]*)(?:\\|BOUNDS:(-?\\d+),(-?\\d+),(\\d+),(\\d+))?/);if(m)return{title:m[4].trim()||m[3],processName:m[3],processId:Number(m[2]),bounds:m[5]?{x:+m[5],y:+m[6],width:+m[7],height:+m[8]}:{x:0,y:0,width:1920,height:1080}};return{title:"Unknown Window (window information unavailable on this system)",processName:"Unknown",bounds:{x:0,y:0,width:1920,height:1080}}}if(process.platform==="win32")try{',
+  },
+  {
+    id: 'MAC5 never report the made-up "Electron" window',
+    find: 'return{title:"ORION AI Command Shell",processName:"Electron",bounds:',
+    replace: 'return{title:"Unknown Window",processName:"Unknown",bounds:',
+  },
+  {
+    id: 'MAC6 visible windows on macOS from the OS (helper "windows")',
+    find: 'async getVisibleWindows(){if(process.platform==="win32")try{',
+    replace: 'async getVisibleWindows(){if(process.platform==="darwin"){let q=await __orionNativeAsync(["windows"],3e3),o=[];for(let l of(q?.stdout||"").split(/\\r?\\n/))if(l.startsWith("{"))try{let w=JSON.parse(l);o.push({title:w.title||w.process,processName:w.process,processId:w.pid,bounds:{x:w.x,y:w.y,width:w.w,height:w.h}})}catch{}return o}if(process.platform==="win32")try{',
+  },
+  {
+    id: 'MAC7 never report made-up visible windows ("Visual Studio Code" ...)',
+    find: 'return[{title:"ORION AI Command Shell",processName:"Electron"},{title:"Visual Studio Code",processName:"Code.exe"}]',
+    replace: 'return[]',
+  },
+  {
+    id: 'MAC8 focus window: real activation on macOS; no fake success elsewhere',
+    find: 'ORION_WIN_TARGET:r}}),!0}catch{return!1}return!0}},TA=class{',
+    replace: 'ORION_WIN_TARGET:r}}),!0}catch{return!1}if(process.platform==="darwin"){let q=await __orionNativeAsync(["focus",Buffer.from(r,"utf8").toString("base64")],6e3);return!!q&&q.code===0&&/^FOCUS_OK/m.test(q.stdout)}return!1}},TA=class{',
+  },
+  {
+    id: 'MAC9 open app on macOS: launch via LaunchServices (Windows names mapped: Notepad->TextEdit, ...), verified in front',
+    find: '}else await this.windowManager.focusWindow(S.canonicalId||T);this.rememberTyping',
+    replace: '}else if(process.platform==="darwin"){let L=S.isProtocolUri?S.resolvedExecutablePath:T,q=await __orionNativeAsync(["launch",Buffer.from(L,"utf8").toString("base64")],15e3),M=(q?.stdout||"").match(/^LAUNCH_OK:([^|\\r\\n]*)/m);if(!q)throw new Error("ORION\'s macOS helper (bin/orion-input-macos) is missing, so apps cannot be opened.");if(/^LAUNCH_NOT_FOUND/m.test(q.stdout))throw new Error(`ENOENT: Application \'${S.displayName||T}\' is not installed on this Mac.`);if(M){let A=M[1].trim();e.parameters._resolvedDisplayName=A,e.parameters._resolvedProcessNames=[...(S.processNames||[]),A];let P=q.stdout.match(/PID:(\\d+)/);P&&(e.parameters._spawnedPid=Number(P[1]))}e.parameters._processRunningVerified=!!M,e.parameters._windowFocusVerified=!!M&&/FRONT:True|URL:/.test(q.stdout)}else await this.windowManager.focusWindow(S.canonicalId||T);this.rememberTyping',
+  },
+  {
+    id: 'MAC10 "is the right app in front" check: on macOS expect the Mac app (calc -> Calculator, notepad -> TextEdit)',
+    find: 'if(e.verifyActiveApp&&r){let i=e.verifyActiveApp.toLowerCase(),',
+    replace: 'if(e.verifyActiveApp&&r){let i=__orionExpectApp(e.verifyActiveApp.toLowerCase()),',
   },
 ];
 

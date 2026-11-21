@@ -73,7 +73,10 @@ export { cm, Kf, kn, Jf, AA };
 `;
 const tmp = path.join(os.tmpdir(), `orion-input-modules-${process.pid}.mjs`);
 fs.writeFileSync(tmp, moduleSrc);
-Object.defineProperty(process, 'platform', { value: 'win32' }); // what the code checks; real I/O goes to the helper
+// --native: run on this OS's own code paths (macOS / Linux helper). Otherwise
+// pretend to be Windows (used with the Windows helper under Wine).
+const NATIVE = process.argv.includes('--native');
+if (!NATIVE) Object.defineProperty(process, 'platform', { value: 'win32' }); // what the code checks; real I/O goes to the helper
 const { cm, Jf, AA } = await import(pathToFileURL(tmp).href);
 fs.rmSync(tmp);
 

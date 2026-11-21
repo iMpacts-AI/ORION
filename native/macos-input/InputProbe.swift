@@ -17,7 +17,9 @@ let argv = CommandLine.arguments
 if argv.count < 2 { FileHandle.standardError.write("usage: input-probe-macos <logfile> [x y w h]\n".data(using: .utf8)!); exit(2) }
 let logPath = argv[1]
 var rect = (x: 100.0, y: 100.0, w: 800.0, h: 500.0)
-if argv.count >= 6, let x = Double(argv[2]), let y = Double(argv[3]), let w = Double(argv[4]), let h = Double(argv[5]) { rect = (x, y, w, h) }
+// --controls: add a real button, text field and checkbox (for uia-list / uia-invoke / uia-setvalue tests)
+let withControls = CommandLine.arguments.contains("--controls")
+if argv.count >= 6, !argv[2].hasPrefix("--"), let x = Double(argv[2]), let y = Double(argv[3]), let w = Double(argv[4]), let h = Double(argv[5]) { rect = (x, y, w, h) }
 
 FileManager.default.createFile(atPath: logPath, contents: nil) // ok if it exists: we append below
 let log = FileHandle(forWritingAtPath: logPath)!
@@ -110,6 +112,13 @@ final class ProbeView: NSView {
     }
 }
 
+final class Controls: NSObject, NSTextFieldDelegate {
+    @objc func pressed(_ b: NSButton) { W("BUTTON|\(b.title)") }
+    @objc func toggled(_ b: NSButton) { W("CHECK|\(b.title)|\(b.state == .on ? "on" : "off")") }
+    func controlTextDidChange(_ n: Notification) { if let f = n.object as? NSTextField { W("FIELD|\(f.placeholderString ?? "")|\(f.stringValue)") } }
+}
+let controls = Controls()
+
 final class Delegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!
     func applicationDidFinishLaunching(_ n: Notification) {
@@ -121,6 +130,17 @@ final class Delegate: NSObject, NSApplicationDelegate {
         window.level = .floating
         let v = ProbeView(frame: NSRect(x: 0, y: 0, width: rect.w, height: rect.h))
         window.contentView = v
+        if withControls {
+            let b = NSButton(title: "Press Me", target: controls, action: #selector(Controls.pressed(_:)))
+            b.frame = NSRect(x: 40, y: rect.h - 80, width: 160, height: 32)
+            let f = NSTextField(frame: NSRect(x: 40, y: rect.h - 140, width: 300, height: 24))
+            f.placeholderString = "Your name"
+            f.delegate = controls
+            f.setAccessibilityLabel("Your name")
+            let c = NSButton(checkboxWithTitle: "Remember me", target: controls, action: #selector(Controls.toggled(_:)))
+            c.frame = NSRect(x: 40, y: rect.h - 190, width: 200, height: 24)
+            for x in [b, f, c] as [NSView] { v.addSubview(x) }
+        }
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(v)
         NSApp.activate(ignoringOtherApps: true)

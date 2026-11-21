@@ -31,12 +31,12 @@ func msleep(_ ms: Int) { usleep(useconds_t(ms * 1000)) }
 let src = CGEventSource(stateID: .hidSystemState)
 
 // ------------------------------------------------------------------ windows
-struct Front { var window: Int; var pid: Int32; var name: String; var title: String }
+struct Front { var window: Int; var pid: Int32; var name: String; var title: String; var bounds: CGRect = .zero }
 
 func frontWindow() -> Front {
     let app = NSWorkspace.shared.frontmostApplication
     let pid = app?.processIdentifier ?? 0
-    var win = 0, title = ""
+    var win = 0, title = "", bounds = CGRect.zero
     if let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] {
         for w in list {
             let owner = (w[kCGWindowOwnerPID as String] as? Int32) ?? -1
@@ -46,16 +46,17 @@ func frontWindow() -> Front {
             if owner == pid && layer >= 0 && layer < 24 {
                 win = (w[kCGWindowNumber as String] as? Int) ?? 0
                 title = (w[kCGWindowName as String] as? String) ?? ""
+                if let b = w[kCGWindowBounds as String] as? NSDictionary, let r = CGRect(dictionaryRepresentation: b) { bounds = r }
                 break
             }
         }
     }
     let name = app?.localizedName ?? ""
-    return Front(window: win, pid: pid, name: name, title: title.replacingOccurrences(of: "|", with: "/"))
+    return Front(window: win, pid: pid, name: name, title: title.replacingOccurrences(of: "|", with: "/"), bounds: bounds)
 }
 func foregroundInfo() -> String {
     let f = frontWindow()
-    return "HWND:\(f.window)|PID:\(f.pid)|PROCESS:\(f.name)|TITLE:\(f.title)"
+    return "HWND:\(f.window)|PID:\(f.pid)|PROCESS:\(f.name)|TITLE:\(f.title)|BOUNDS:\(Int(f.bounds.minX)),\(Int(f.bounds.minY)),\(Int(f.bounds.width)),\(Int(f.bounds.height))"
 }
 
 // ------------------------------------------------------------------ pointer
@@ -229,20 +230,189 @@ func releaseAll() -> Int {
     return n
 }
 
+
+// ------------------------------------------------------------------ apps + windows
+func jsonEsc(_ s: String) -> String {
+    var o = ""
+    for u in s.unicodeScalars {
+        switch u {
+        case "\"": o += "\\\""
+        case "\\": o += "\\\\"
+        default: o += u.value < 0x20 ? " " : String(u)
+        }
+    }
+    return o
+}
+func b64(_ s: String?) -> String? { s.flatMap { Data(base64Encoded: $0) }.flatMap { String(data: $0, encoding: .utf8) } }
+
+func listWindows() -> [String] {
+    var lines: [String] = []
+    guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return lines }
+    for w in list {
+        let layer = (w[kCGWindowLayer as String] as? Int) ?? -1
+        guard layer >= 0 && layer < 24 else { continue }
+        let owner = (w[kCGWindowOwnerName as String] as? String) ?? ""
+        let pid = (w[kCGWindowOwnerPID as String] as? Int32) ?? 0
+        let num = (w[kCGWindowNumber as String] as? Int) ?? 0
+        let title = (w[kCGWindowName as String] as? String) ?? ""
+        var r = CGRect.zero
+        if let b = w[kCGWindowBounds as String] as? NSDictionary, let rr = CGRect(dictionaryRepresentation: b) { r = rr }
+        if r.width < 40 || r.height < 40 { continue }
+        lines.append("{\"window\":\(num),\"pid\":\(pid),\"process\":\"\(jsonEsc(owner))\",\"title\":\"\(jsonEsc(title))\",\"x\":\(Int(r.minX)),\"y\":\(Int(r.minY)),\"w\":\(Int(r.width)),\"h\":\(Int(r.height))}")
+    }
+    return lines
+}
+
+// Windows app names ORION's tools and models use -> the macOS app that does the job.
+let macAliases: [String: String] = [
+    "notepad": "TextEdit", "wordpad": "TextEdit", "text editor": "TextEdit",
+    "file explorer": "Finder", "explorer": "Finder", "files": "Finder", "this pc": "Finder",
+    "cmd": "Terminal", "command prompt": "Terminal", "powershell": "Terminal", "windows terminal": "Terminal", "terminal": "Terminal",
+    "task manager": "Activity Monitor", "control panel": "System Settings", "settings": "System Settings",
+    "system preferences": "System Settings", "paint": "Preview", "photos": "Photos", "snipping tool": "Screenshot",
+    "calc": "Calculator", "calculator": "Calculator", "edge": "Microsoft Edge", "microsoft edge": "Microsoft Edge",
+    "chrome": "Google Chrome", "google chrome": "Google Chrome", "word": "Microsoft Word", "excel": "Microsoft Excel",
+    "powerpoint": "Microsoft PowerPoint", "outlook": "Microsoft Outlook", "teams": "Microsoft Teams",
+    "vscode": "Visual Studio Code", "vs code": "Visual Studio Code", "code": "Visual Studio Code",
+    "wt": "Terminal", "taskmgr": "Activity Monitor", "mspaint": "Preview", "snippingtool": "Screenshot",
+    "control": "System Settings", "ms-settings": "System Settings", "msedge": "Microsoft Edge", "winword": "Microsoft Word",
+    "powerpnt": "Microsoft PowerPoint", "onenote": "Microsoft OneNote",
+    "mail": "Mail", "calendar": "Calendar", "clock": "Clock", "maps": "Maps", "music": "Music", "spotify": "Spotify",
+]
+func macAppName(_ raw: String) -> String {
+    let k = raw.trimmingCharacters(in: .whitespaces).lowercased().replacingOccurrences(of: ".exe", with: "")
+    return macAliases[k] ?? raw.trimmingCharacters(in: .whitespaces)
+}
+func runningApp(matching name: String) -> NSRunningApplication? {
+    let n = name.lowercased()
+    let apps = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
+    if let a = apps.first(where: { ($0.localizedName ?? "").lowercased() == n }) { return a }
+    if let a = apps.first(where: { ($0.localizedName ?? "").lowercased().contains(n) || ($0.bundleIdentifier ?? "").lowercased().contains(n) }) { return a }
+    // match a window title (e.g. "YouTube" in a browser window)
+    if let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] {
+        for w in list where ((w[kCGWindowName as String] as? String) ?? "").lowercased().contains(n) {
+            if let pid = w[kCGWindowOwnerPID as String] as? Int32, let a = NSRunningApplication(processIdentifier: pid) { return a }
+        }
+    }
+    return nil
+}
+@discardableResult
+func runOpen(_ args: [String]) -> Int32 {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+    p.arguments = args
+    p.standardOutput = FileHandle.nullDevice
+    p.standardError = FileHandle.nullDevice
+    do { try p.run() } catch { return 127 }
+    p.waitUntilExit()
+    return p.terminationStatus
+}
+func waitFront(_ pred: (NSRunningApplication) -> Bool, ms: Int) -> NSRunningApplication? {
+    var waited = 0
+    while waited <= ms {
+        if let f = NSWorkspace.shared.frontmostApplication, pred(f) { return f }
+        msleep(100); waited += 100
+    }
+    return nil
+}
+// Bring an app to the front. Background processes may not activate others on
+// recent macOS, so `open -a <bundle>` (handled by LaunchServices) is the fallback.
+func focusApp(_ a: NSRunningApplication) -> Bool {
+    if NSWorkspace.shared.frontmostApplication?.processIdentifier == a.processIdentifier { return true }
+    a.activate(options: [.activateAllWindows])
+    if waitFront({ $0.processIdentifier == a.processIdentifier }, ms: 700) != nil { return true }
+    if let url = a.bundleURL { runOpen(["-a", url.path]) }
+    return waitFront({ $0.processIdentifier == a.processIdentifier }, ms: 2000) != nil
+}
+
+// ------------------------------------------------------------------ accessibility tree (UIA equivalent)
+func ax(_ e: AXUIElement, _ a: String) -> AnyObject? {
+    var v: AnyObject?
+    return AXUIElementCopyAttributeValue(e, a as CFString, &v) == .success ? v : nil
+}
+func axString(_ e: AXUIElement, _ a: String) -> String { (ax(e, a) as? String) ?? "" }
+func axFrame(_ e: AXUIElement) -> CGRect? {
+    guard let pv = ax(e, kAXPositionAttribute), let sv = ax(e, kAXSizeAttribute) else { return nil }
+    var p = CGPoint.zero, s = CGSize.zero
+    guard CFGetTypeID(pv) == AXValueGetTypeID(), CFGetTypeID(sv) == AXValueGetTypeID() else { return nil }
+    AXValueGetValue(pv as! AXValue, .cgPoint, &p)
+    AXValueGetValue(sv as! AXValue, .cgSize, &s)
+    return CGRect(origin: p, size: s)
+}
+struct Control { let el: AXUIElement; let name: String; let role: String; let frame: CGRect; let password: Bool }
+let interactiveRoles: [String: String] = [
+    "AXButton": "Button", "AXTextField": "Edit", "AXTextArea": "Edit", "AXSecureTextField": "Edit", "AXComboBox": "ComboBox",
+    "AXCheckBox": "CheckBox", "AXRadioButton": "RadioButton", "AXPopUpButton": "ComboBox", "AXMenuButton": "SplitButton",
+    "AXMenuItem": "MenuItem", "AXLink": "Hyperlink", "AXTab": "TabItem", "AXDisclosureTriangle": "Button", "AXSlider": "Slider",
+    "AXIncrementor": "Spinner", "AXSearchField": "Edit", "AXCell": "ListItem", "AXRow": "ListItem",
+]
+func controlName(_ e: AXUIElement) -> String {
+    for a in [kAXTitleAttribute, kAXDescriptionAttribute, "AXPlaceholderValue", kAXHelpAttribute] {
+        let s = axString(e, a).trimmingCharacters(in: .whitespacesAndNewlines)
+        if !s.isEmpty { return s }
+    }
+    if let t = ax(e, kAXTitleUIElementAttribute), CFGetTypeID(t) == AXUIElementGetTypeID() {
+        let s = axString(t as! AXUIElement, kAXValueAttribute)
+        if !s.isEmpty { return s }
+    }
+    let role = axString(e, kAXRoleAttribute)
+    if role == "AXButton" || role == "AXCheckBox" || role == "AXRadioButton" { return axString(e, kAXValueAttribute) }
+    return ""
+}
+func frontWindowElement() -> AXUIElement? {
+    guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+    let a = AXUIElementCreateApplication(app.processIdentifier)
+    if let w = ax(a, kAXFocusedWindowAttribute), CFGetTypeID(w) == AXUIElementGetTypeID() { return (w as! AXUIElement) }
+    if let ws = ax(a, kAXWindowsAttribute) as? [AXUIElement], let w = ws.first { return w }
+    return a
+}
+func collectControls(max: Int) -> [Control] {
+    guard let root = frontWindowElement() else { return [] }
+    var out: [Control] = [], queue: [AXUIElement] = [root], seen = 0
+    while !queue.isEmpty && out.count < max && seen < 4000 {
+        let e = queue.removeFirst(); seen += 1
+        let role = axString(e, kAXRoleAttribute), sub = axString(e, kAXSubroleAttribute)
+        if let mapped = interactiveRoles[role] ?? interactiveRoles[sub] {
+            let enabled = (ax(e, kAXEnabledAttribute) as? Bool) ?? true
+            if enabled, let f = axFrame(e), f.width >= 2, f.height >= 2 {
+                let name = controlName(e)
+                if !name.isEmpty || mapped == "Edit" {
+                    out.append(Control(el: e, name: name, role: mapped, frame: f, password: role == "AXSecureTextField" || sub == "AXSecureTextField"))
+                }
+            }
+        }
+        if let kids = ax(e, kAXChildrenAttribute) as? [AXUIElement] { queue.append(contentsOf: kids) }
+    }
+    return out
+}
+func findControl(_ name: String, timeoutMs: Int = 3000) -> Control? {
+    let n = name.trimmingCharacters(in: .whitespaces).lowercased()
+    var waited = 0
+    repeat {
+        let all = collectControls(max: 400)
+        if let c = all.first(where: { $0.name.lowercased() == n }) { return c }
+        if let c = all.first(where: { $0.name.lowercased().contains(n) }) { return c }
+        msleep(150); waited += 150
+    } while waited < timeoutMs
+    return nil
+}
+func describe(_ c: Control) -> String { "NAME:\(c.name.replacingOccurrences(of: "|", with: "/"))|TYPE:\(c.role)" }
+
 // ------------------------------------------------------------------ main
 var args = Array(CommandLine.arguments.dropFirst())
 guard let cmdRaw = args.first else {
-    out("USAGE: orion-input-macos <status|getpos|setpos|click|clickat|doubleclick|mousedown|mouseup|drag|scroll|typeunicode|presskey|keydown|keyup|submit|releaseall|foreground> [args]")
+    out("USAGE: orion-input-macos <status|permission|getpos|setpos|click|clickat|doubleclick|mousedown|mouseup|drag|scroll|typeunicode|presskey|keydown|keyup|winhotkey|submit|releaseall|foreground|windows|focus|launch|uia-list|uia-invoke|uia-setvalue|uia-focused-value> [args]")
     exit(0)
 }
 let cmd = cmdRaw.lowercased()
 args.removeFirst()
 func arg(_ i: Int) -> String? { i < args.count ? args[i] : nil }
 
-let inputCommands: Set<String> = ["clickat", "click", "doubleclick", "mousedown", "drag", "scroll", "typeunicode", "presskey", "keydown", "submit", "setpos"]
+let inputCommands: Set<String> = ["clickat", "click", "doubleclick", "mousedown", "drag", "scroll", "typeunicode", "presskey", "keydown", "submit", "setpos", "winhotkey", "uia-invoke", "uia-setvalue"]
+let needsAccessibility: Set<String> = inputCommands.union(["uia-list", "uia-focused-value"])
 let trusted = AXIsProcessTrusted()
 
-if inputCommands.contains(cmd) && !trusted {
+if needsAccessibility.contains(cmd) && !trusted {
     out("PERMISSION_REQUIRED:macOS has not given Accessibility access to the app running ORION (System Settings > Privacy & Security > Accessibility); nothing was sent")
     exit(15)
 }
@@ -326,6 +496,85 @@ case "keydown", "keyup":
     out("\(cmd == "keydown" ? "KEYDOWN_OK:" : "KEYUP_OK:")\(name)")
 case "releaseall":
     out("RELEASEALL_OK:\(releaseAll())")
+case "windows":
+    for l in listWindows() { out(l) }
+    out("WINDOWS_OK:\(listWindows().count)")
+case "focus":
+    guard let name = b64(arg(0)) ?? arg(0) else { out("ERR_INVALID_ARGS: focus requires <base64 app or window name>"); code = 2; break }
+    guard let a = runningApp(matching: macAppName(name)) ?? runningApp(matching: name) else {
+        out("FOCUS_NOT_FOUND:\(name.replacingOccurrences(of: "|", with: "/"))|\(foregroundInfo())"); code = 8; break
+    }
+    if focusApp(a) { out("FOCUS_OK:\(a.localizedName ?? "")|\(foregroundInfo())") }
+    else { out("FOCUS_UNVERIFIED:\(a.localizedName ?? "")|\(foregroundInfo())"); code = 3 }
+case "launch":
+    guard let target = b64(arg(0)) ?? arg(0), !target.isEmpty else { out("ERR_INVALID_ARGS: launch requires <base64 app name or URL>"); code = 2; break }
+    let before = NSWorkspace.shared.frontmostApplication?.processIdentifier
+    if target.contains("://") {
+        if runOpen([target]) != 0 { out("LAUNCH_FAILED:could not open \(target)"); code = 8; break }
+        if let f = waitFront({ $0.processIdentifier != before }, ms: 6000) ?? NSWorkspace.shared.frontmostApplication {
+            out("LAUNCH_OK:\(f.localizedName ?? "")|URL:\(target)|PID:\(f.processIdentifier)|\(foregroundInfo())")
+        }
+        break
+    }
+    let app = macAppName(target)
+    if runOpen(["-a", app]) != 0 && (app == target || runOpen(["-a", target]) != 0) {
+        out("LAUNCH_NOT_FOUND:'\(target)' is not installed (looked for '\(app)')"); code = 8; break
+    }
+    let want = app.lowercased()
+    if let f = waitFront({ ($0.localizedName ?? "").lowercased().contains(want) || want.contains(($0.localizedName ?? "~").lowercased()) }, ms: 8000) {
+        out("LAUNCH_OK:\(f.localizedName ?? app)|PID:\(f.processIdentifier)|FRONT:True|\(foregroundInfo())")
+    } else if let r = runningApp(matching: app) {
+        out("LAUNCH_UNVERIFIED:\(r.localizedName ?? app) is running but not in front|PID:\(r.processIdentifier)|\(foregroundInfo())"); code = 3
+    } else {
+        out("LAUNCH_UNVERIFIED:\(app) did not start|\(foregroundInfo())"); code = 3
+    }
+case "winhotkey":
+    // The Windows key's role on macOS is Command: Win+<key> -> Cmd+<key>.
+    let keys = args.filter { !["win", "windows", "lwin", "rwin"].contains($0.lowercased()) }
+    let spec = (["cmd"] + keys).joined(separator: "+")
+    if keys.isEmpty { out("ERR_INVALID_KEY:win|macOS has no Start menu key; send a shortcut such as cmd+space"); code = 2; break }
+    switch parseChord(spec) {
+    case .keys(let mods, let k): sendChord(mods, k); out("WINHOTKEY_OK:\(spec)")
+    case .literal(let t): _ = typeText(t); out("WINHOTKEY_OK:\(spec)|CHAR")
+    case .invalid(let why): out("ERR_INVALID_KEY:\(spec)|\(why)"); code = 2
+    }
+case "permission":
+    let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+    let ok = AXIsProcessTrustedWithOptions(opts)
+    out(ok ? "PERMISSION_OK:ACCESSIBILITY" : "PERMISSION_REQUESTED:macOS is showing the Accessibility prompt; allow the app running ORION, then retry")
+    if !ok { code = 15 }
+case "uia-list":
+    let max = Int(arg(0) ?? "") ?? 60
+    let cs = collectControls(max: Swift.max(1, Swift.min(200, max)))
+    for (i, c) in cs.enumerated() {
+        out("{\"id\":\(i),\"name\":\"\(jsonEsc(c.name))\",\"role\":\"\(c.role)\",\"x\":\(Int(c.frame.midX)),\"y\":\(Int(c.frame.midY)),\"w\":\(Int(c.frame.width)),\"h\":\(Int(c.frame.height)),\"password\":\(c.password)}")
+    }
+    if cs.isEmpty { out("UIA_LIST_EMPTY|\(foregroundInfo())"); code = 8 } else { out("UIA_LIST_OK:\(cs.count)|\(foregroundInfo())") }
+case "uia-invoke":
+    guard let name = b64(arg(0)) else { out("ERR_INVALID_ARGS: uia-invoke requires <base64 name>"); code = 2; break }
+    guard let c = findControl(name) else { out("UIA_NOT_FOUND:\(name.replacingOccurrences(of: "|", with: "/"))|\(foregroundInfo())"); code = 8; break }
+    if AXUIElementPerformAction(c.el, kAXPressAction as CFString) == .success {
+        out("UIA_INVOKE_OK:\(describe(c))|VIA:PRESS")
+    } else {
+        let p = CGPoint(x: c.frame.midX, y: c.frame.midY)
+        _ = moveTo(p); msleep(30); click(.left, at: p)
+        out("UIA_INVOKE_OK:\(describe(c))|VIA:CLICK@\(Int(p.x)),\(Int(p.y))")
+    }
+case "uia-setvalue":
+    guard let name = b64(arg(0)), let value = b64(arg(1)) else { out("ERR_INVALID_ARGS: uia-setvalue requires <base64 name> <base64 value>"); code = 2; break }
+    guard let c = findControl(name) else { out("UIA_NOT_FOUND:\(name.replacingOccurrences(of: "|", with: "/"))|\(foregroundInfo())"); code = 8; break }
+    var settable: DarwinBoolean = false
+    AXUIElementIsAttributeSettable(c.el, kAXValueAttribute as CFString, &settable)
+    if c.password || !settable.boolValue { out("UIA_NOT_EDITABLE:\(describe(c))"); code = 9; break }
+    AXUIElementSetAttributeValue(c.el, kAXValueAttribute as CFString, value as CFString)
+    msleep(80)
+    if axString(c.el, kAXValueAttribute) == value { out("UIA_SETVALUE_OK:\(describe(c))|VERIFIED:TRUE") }
+    else { out("UIA_SETVALUE_MISMATCH:\(describe(c))|VERIFIED:FALSE"); code = 10 }
+case "uia-focused-value":
+    let sys = AXUIElementCreateSystemWide()
+    if let f = ax(sys, kAXFocusedUIElementAttribute), CFGetTypeID(f) == AXUIElementGetTypeID(), let v = ax(f as! AXUIElement, kAXValueAttribute) as? String {
+        out("UIA_FOCUSED_VALUE:\(Data(v.utf8).base64EncodedString())")
+    } else { out("UIA_FOCUSED_NOVALUE|\(foregroundInfo())"); code = 11 }
 case "foreground":
     out("FOREGROUND:\(foregroundInfo())|UIPI_BLOCKED:False")
 default:

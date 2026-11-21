@@ -121,6 +121,32 @@ jobs:
         run: |
           node tests/input/helper-e2e.mjs --helper native/macos-input/build/orion-input-macos \
             --probe native/macos-input/build/input-probe-macos --log "$RUNNER_TEMP/probe-macos.log"
+      - name: Install ORION v1.2.0, apply the hot-fix, add the macOS helper
+        if: ${{ !cancelled() }}
+        env:
+          ORION_VERSION: v1.2.0
+          ORION_INSTALL_DIR: ${{ runner.temp }}/orion/app
+          ORION_BIN_DIR: ${{ runner.temp }}/orion/bin
+        run: |
+          bash ./install.sh
+          node tools/hotfix/patch-input-v1.2.0.mjs "$ORION_INSTALL_DIR/orion.mjs" "$ORION_INSTALL_DIR/orion.mjs"
+          cp native/macos-input/build/orion-input-macos "$ORION_INSTALL_DIR/bin/"
+      - name: ORION JS input layer end-to-end (macOS code paths)
+        if: ${{ !cancelled() }}
+        env:
+          ORION_E2E_REPORT: ${{ runner.temp }}/macos-js-e2e.json
+        run: |
+          node tests/input/js-driver-e2e.mjs --native --orion "$RUNNER_TEMP/orion/app/orion.mjs" \
+            --helper native/macos-input/build/orion-input-macos --probe native/macos-input/build/input-probe-macos \
+            --log "$RUNNER_TEMP/probe-macos-js.log"
+      - name: Apps, windows, accessibility and ORION itself
+        if: ${{ !cancelled() }}
+        env:
+          ORION_E2E_REPORT: ${{ runner.temp }}/macos-apps-e2e.json
+        run: |
+          node tests/input/macos-apps-e2e.mjs --helper native/macos-input/build/orion-input-macos \
+            --probe native/macos-input/build/input-probe-macos --log "$RUNNER_TEMP/probe-macos-apps.log" \
+            --orion "$RUNNER_TEMP/orion/app/orion.mjs"
       - name: Screenshot on failure
         if: failure()
         run: screencapture -x "$RUNNER_TEMP/screen-macos.png" || true
@@ -129,8 +155,8 @@ jobs:
         with:
           name: input-e2e-macos-${{ matrix.arch }}
           path: |
-            ${{ runner.temp }}/macos-e2e.json
-            ${{ runner.temp }}/probe-macos.log
+            ${{ runner.temp }}/macos-*.json
+            ${{ runner.temp }}/probe-macos*.log
             ${{ runner.temp }}/screen-macos.png
           if-no-files-found: ignore
 
