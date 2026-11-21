@@ -161,7 +161,7 @@ public static class NativeInputEntry
 	public static extern int GetSystemMetrics(int nIndex);
 
 	[DllImport("user32.dll")]
-	public static extern IntPtr GetForegroundWindow();
+	internal static extern IntPtr GetForegroundWindow();
 
 	[DllImport("user32.dll", CharSet = CharSet.Unicode)]
 	public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
@@ -193,6 +193,222 @@ public static class NativeInputEntry
 	private static int InputSize()
 	{
 		return Marshal.SizeOf(typeof(INPUT));
+	}
+
+	private static byte ModifierVk(string token)
+	{
+		switch (token)
+		{
+		case "ctrl":
+		case "control":
+		case "lctrl":
+		case "cmd":
+		case "command":
+			return 17;
+		case "rctrl":
+			return 163;
+		case "shift":
+		case "lshift":
+			return 16;
+		case "rshift":
+			return 161;
+		case "alt":
+		case "lalt":
+		case "option":
+		case "opt":
+			return 18;
+		case "ralt":
+		case "altgr":
+			return 165;
+		case "win":
+		case "windows":
+		case "lwin":
+		case "meta":
+		case "super":
+			return 91;
+		case "rwin":
+			return 92;
+		default:
+			return 0;
+		}
+	}
+
+	// Accepts every way ORION's JS layer (or a model) spells a key or shortcut:
+	//   "enter", "{ENTER}", "f5", "a", "ctrl+s", "Ctrl + Shift + Esc", "cmd+c",
+	//   SendKeys style "^s", "^{SPACE}", "^space", "%{F4}", "+{TAB}", "^+{ESC}".
+	// A single non-alphanumeric character ("?", "+") is typed as that character.
+	// Unknown keys are rejected (false) so nothing is ever typed by accident.
+	public static bool ParseChord(string spec, List<byte> mods, out byte key, out string literal, out string error)
+	{
+		key = 0;
+		literal = null;
+		error = null;
+		if (string.IsNullOrEmpty(spec))
+		{
+			error = "empty key";
+			return false;
+		}
+		string s = spec.Trim();
+		if (s.Length == 0)
+		{
+			// a lone space
+			key = 32;
+			return true;
+		}
+		if (s.Length == 1)
+		{
+			char c = s[0];
+			if (char.IsLetterOrDigit(c) && c < 128)
+			{
+				key = ResolveVirtualKey(s);
+				return key != 0;
+			}
+			literal = s;
+			return true;
+		}
+		// "ctrl+shift+s" style (also "ctrl + s", "ctrl+plus", "ctrl++")
+		string lower = s.ToLowerInvariant();
+		int plus = lower.IndexOf('+');
+		if (plus > 0 && ModifierVk(lower.Substring(0, plus).Trim()) != 0)
+		{
+			string rest = lower;
+			while (true)
+			{
+				int i = rest.IndexOf('+');
+				if (i <= 0)
+				{
+					break;
+				}
+				byte m = ModifierVk(rest.Substring(0, i).Trim());
+				if (m == 0)
+				{
+					break;
+				}
+				if (!mods.Contains(m))
+				{
+					mods.Add(m);
+				}
+				rest = rest.Substring(i + 1);
+			}
+			string last = rest.Trim();
+			if (last.Length == 0 && rest.Length == 0 && lower.EndsWith("++"))
+			{
+				last = "+";
+			}
+			if (last.Length == 0)
+			{
+				error = "shortcut has no key after the modifiers";
+				return false;
+			}
+			byte lm = ModifierVk(last);
+			key = (lm != 0) ? lm : ResolveVirtualKey(last);
+			if (key == 0)
+			{
+				error = "unknown key '" + last + "'";
+				return false;
+			}
+			return true;
+		}
+		// SendKeys style prefixes
+		int p = 0;
+		while (p < s.Length - 1 && (s[p] == '^' || s[p] == '%' || s[p] == '+'))
+		{
+			byte m = (byte)((s[p] == '^') ? 17 : ((s[p] == '%') ? 18 : 16));
+			if (!mods.Contains(m))
+			{
+				mods.Add(m);
+			}
+			p++;
+		}
+		string keyPart = s.Substring(p);
+		if (keyPart.StartsWith("{") && keyPart.EndsWith("}") && keyPart.Length >= 3)
+		{
+			string inner = keyPart.Substring(1, keyPart.Length - 2);
+			if (inner.Length == 1 && !char.IsLetterOrDigit(inner[0]))
+			{
+				if (mods.Count == 0)
+				{
+					literal = inner;
+					return true;
+				}
+				key = ResolveVirtualKey(inner);
+			}
+			else
+			{
+				key = ResolveVirtualKey(inner);
+			}
+		}
+		else
+		{
+			key = ResolveVirtualKey(keyPart);
+		}
+		if (key == 0)
+		{
+			error = "unknown key '" + keyPart + "'";
+			mods.Clear();
+			return false;
+		}
+		return true;
+	}
+
+	private static void SendChord(List<byte> mods, byte key)
+	{
+		int pressed = 0;
+		try
+		{
+			foreach (byte m in mods)
+			{
+				KeyDown(m);
+				pressed++;
+				Thread.Sleep(10);
+			}
+			Tap(key);
+		}
+		finally
+		{
+			for (int i = pressed - 1; i >= 0; i--)
+			{
+				Thread.Sleep(10);
+				KeyUp(mods[i]);
+			}
+		}
+	}
+
+	// Press at (x1,y1), move in small steps, release at (x2,y2). The button is
+	// always released, even if a move fails.
+	private static int Drag(int x1, int y1, int x2, int y2, string button)
+	{
+		if (button != "right" && button != "middle")
+		{
+			button = "left";
+		}
+		if (!MoveAbsolute(x1, y1))
+		{
+			GetCursorPos(out var a);
+			Console.WriteLine("DRAG_FAILED:cursor not at start|ACTUAL:" + a.X + "," + a.Y);
+			return 3;
+		}
+		Thread.Sleep(30);
+		MouseButtonAt(button, down: true, x1, y1);
+		try
+		{
+			int steps = Math.Max(4, Math.Min(25, (int)(Math.Sqrt((double)((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1))) / 20.0)));
+			for (int i = 1; i <= steps; i++)
+			{
+				MoveAbsolute(x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps);
+				Thread.Sleep(12);
+			}
+			Thread.Sleep(30);
+		}
+		finally
+		{
+			MouseButtonAt(button, down: false, x2, y2);
+		}
+		Thread.Sleep(30);
+		GetCursorPos(out var b);
+		bool ok = Math.Abs(b.X - x2) <= 2 && Math.Abs(b.Y - y2) <= 2;
+		Console.WriteLine((ok ? "DRAG_OK:" : "DRAG_UNVERIFIED:") + b.X + "," + b.Y + "|FROM:" + x1 + "," + y1 + "|BUTTON:" + button);
+		return ok ? 0 : 3;
 	}
 
 	private static INPUT MouseInput(uint flags, int dx, int dy, uint data)
@@ -268,14 +484,40 @@ public static class NativeInputEntry
 		Send(MouseInput(flags, 0, 0, 0u));
 	}
 
-	private static void ClickButton(string button)
+	internal static void ClickButton(string button)
 	{
 		MouseButton(button, down: true);
 		Thread.Sleep(25);
 		MouseButton(button, down: false);
 	}
 
-	private static bool MoveAbsolute(int x, int y)
+	private static void Normalize(int x, int y, out int dx, out int dy)
+	{
+		int vx = GetSystemMetrics(76);
+		int vy = GetSystemMetrics(77);
+		int vw = Math.Max(1, GetSystemMetrics(78));
+		int vh = Math.Max(1, GetSystemMetrics(79));
+		dx = (int)Math.Round((double)(x - vx) * 65535.0 / (double)Math.Max(1, vw - 1));
+		dy = (int)Math.Round((double)(y - vy) * 65535.0 / (double)Math.Max(1, vh - 1));
+	}
+
+	// Button event that carries its own absolute position, so the click lands on
+	// (x,y) even if the cursor is still catching up or the user nudges the mouse.
+	internal static void MouseButtonAt(string button, bool down, int x, int y)
+	{
+		uint flags = ((button == "right") ? (down ? 8u : 16u) : ((!(button == "middle")) ? (down ? 2u : 4u) : (down ? 32u : 64u)));
+		Normalize(x, y, out var dx, out var dy);
+		Send(MouseInput(flags | 0xC001u, dx, dy, 0u));
+	}
+
+	internal static void ClickButtonAt(string button, int x, int y)
+	{
+		MouseButtonAt(button, down: true, x, y);
+		Thread.Sleep(25);
+		MouseButtonAt(button, down: false, x, y);
+	}
+
+	internal static bool MoveAbsolute(int x, int y)
 	{
 		int systemMetrics = GetSystemMetrics(76);
 		int systemMetrics2 = GetSystemMetrics(77);
@@ -339,7 +581,7 @@ public static class NativeInputEntry
 		return num;
 	}
 
-	private static string FromB64(string b64)
+	internal static string FromB64(string b64)
 	{
 		return Encoding.UTF8.GetString(Convert.FromBase64String(b64));
 	}
@@ -415,7 +657,7 @@ public static class NativeInputEntry
 		return num;
 	}
 
-	private static string ForegroundInfo()
+	internal static string ForegroundInfo()
 	{
 		IntPtr foregroundWindow = GetForegroundWindow();
 		StringBuilder stringBuilder = new StringBuilder(512);
@@ -432,16 +674,8 @@ public static class NativeInputEntry
 		return "HWND:" + foregroundWindow.ToInt64() + "|PID:" + lpdwProcessId + "|PROCESS:" + text + "|TITLE:" + stringBuilder.ToString().Replace("|", "/");
 	}
 
-	private static bool IsInteractive(ControlType t)
-	{
-		if (t != ControlType.Button && t != ControlType.Edit && t != ControlType.Hyperlink && t != ControlType.CheckBox && t != ControlType.RadioButton && t != ControlType.ComboBox && t != ControlType.MenuItem && t != ControlType.ListItem && t != ControlType.TabItem && t != ControlType.Document && t != ControlType.SplitButton)
-		{
-			return t == ControlType.TreeItem;
-		}
-		return true;
-	}
 
-	private static string JsonEsc(string s)
+	internal static string JsonEsc(string s)
 	{
 		if (s == null)
 		{
@@ -466,111 +700,8 @@ public static class NativeInputEntry
 		return stringBuilder.ToString();
 	}
 
-	private static AutomationElement FindByName(string name, int timeoutMs)
-	{
-		AutomationElement val = AutomationElement.FromHandle(GetForegroundWindow());
-		if (val == (AutomationElement)null)
-		{
-			return null;
-		}
-		DateTime dateTime = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-		string text = name.Trim().ToLowerInvariant();
-		do
-		{
-			AutomationElementCollection val2 = val.FindAll((TreeScope)4, Condition.TrueCondition);
-			AutomationElement val3 = null;
-			foreach (AutomationElement item in val2)
-			{
-				AutomationElement val4 = item;
-				string text2;
-				try
-				{
-					AutomationElement.AutomationElementInformation current = val4.Current;
-					text2 = (current.Name ?? "").Trim().ToLowerInvariant();
-				}
-				catch
-				{
-					continue;
-				}
-				if (text2.Length == 0)
-				{
-					continue;
-				}
-				bool flag = true;
-				try
-				{
-					AutomationElement.AutomationElementInformation current2 = val4.Current;
-					int num;
-					if (current2.IsEnabled)
-					{
-						AutomationElement.AutomationElementInformation current3 = val4.Current;
-						num = ((!current3.IsOffscreen) ? 1 : 0);
-					}
-					else
-					{
-						num = 0;
-					}
-					flag = (byte)num != 0;
-				}
-				catch
-				{
-				}
-				if (flag)
-				{
-					if (text2 == text)
-					{
-						return val4;
-					}
-					if (val3 == (AutomationElement)null && text2.Contains(text))
-					{
-						val3 = val4;
-					}
-				}
-			}
-			if (val3 != (AutomationElement)null)
-			{
-				return val3;
-			}
-			Thread.Sleep(150);
-		}
-		while (DateTime.UtcNow < dateTime);
-		return null;
-	}
 
-	private static string Describe(AutomationElement el)
-	{
-		try
-		{
-			AutomationElement.AutomationElementInformation current = el.Current;
-			string text = (current.Name ?? "").Replace("|", "/");
-			AutomationElement.AutomationElementInformation current2 = el.Current;
-			return "NAME:" + text + "|TYPE:" + ((AutomationIdentifier)current2.ControlType).ProgrammaticName.Replace("ControlType.", "");
-		}
-		catch
-		{
-			return "NAME:?|TYPE:?";
-		}
-	}
 
-	private static string FocusedValue()
-	{
-		AutomationElement focusedElement = AutomationElement.FocusedElement;
-		if (focusedElement == (AutomationElement)null)
-		{
-			return null;
-		}
-		object obj = default(object);
-		if (focusedElement.TryGetCurrentPattern(ValuePattern.Pattern, out obj))
-		{
-			ValuePattern.ValuePatternInformation current = ((ValuePattern)obj).Current;
-			return current.Value ?? "";
-		}
-		if (focusedElement.TryGetCurrentPattern(TextPattern.Pattern, out obj))
-		{
-			return ((TextPattern)obj).DocumentRange.GetText(20000) ?? "";
-		}
-		return null;
-	}
 
 	public static string EscapeSendKeysLiteral(string input)
 	{
@@ -775,8 +906,40 @@ public static class NativeInputEntry
 			return 122;
 		case "f12":
 			return 123;
+		case "bs":
+			return 8;
+		case "numlock":
+			return 144;
+		case "scrolllock":
+			return 145;
+		case "pause":
+		case "break":
+			return 19;
+		case "apps":
+		case "contextmenu":
+		case "menukey":
+			return 93;
 		default:
+			if (text.Length >= 2 && text.Length <= 3 && text[0] == 'f' && int.TryParse(text.Substring(1), out var fn) && fn >= 13 && fn <= 24)
+			{
+				return (byte)(124 + (fn - 13));
+			}
 			return 0;
+		}
+	}
+
+	// Runs a UI Automation command; reports a clear error instead of crashing
+	// when UIAutomationClient is not installed.
+	private static int RunUia(Func<int> fn)
+	{
+		try
+		{
+			return fn();
+		}
+		catch (System.IO.FileNotFoundException ex)
+		{
+			Console.WriteLine("UIA_UNAVAILABLE:UI Automation is not available on this system (" + ex.FileName + ")");
+			return 14;
 		}
 	}
 
@@ -803,7 +966,7 @@ public static class NativeInputEntry
 		}
 		if (args.Length == 0)
 		{
-			Console.WriteLine("USAGE: win32-native-input <status|getpos|setpos|click|clickat|doubleclick|scroll|type|typeliteral|typeunicode|paste|submit|presskey|keydown|keyup|winhotkey|releaseall|foreground|uia-list|uia-invoke|uia-setvalue|uia-focused-value|screenshot> [args]");
+			Console.WriteLine("USAGE: win32-native-input <status|getpos|setpos|click|clickat|doubleclick|mousedown|mouseup|drag|scroll|type|typeliteral|typeunicode|paste|submit|presskey|keydown|keyup|winhotkey|releaseall|foreground|uia-list|uia-invoke|uia-setvalue|uia-focused-value|screenshot> [args]");
 			return 0;
 		}
 		string command = args[0].ToLowerInvariant();
@@ -830,12 +993,12 @@ public static class NativeInputEntry
 					flag = SetThreadDesktop(hInput);
 				}
 				string environmentVariable = Environment.GetEnvironmentVariable("ORION_EXPECT_HWND");
-				if (!string.IsNullOrEmpty(environmentVariable) && environmentVariable != "0" && (command == "clickat" || command == "typeunicode" || command == "paste" || command == "submit" || command == "typeliteral" || command == "presskey" || command == "winhotkey" || command == "uia-invoke" || command == "uia-setvalue") && long.TryParse(environmentVariable, out var result) && GetForegroundWindow().ToInt64() != result)
+				if (!string.IsNullOrEmpty(environmentVariable) && environmentVariable != "0" && (command == "clickat" || command == "click" || command == "doubleclick" || command == "mousedown" || command == "drag" || command == "scroll" || command == "type" || command == "typeunicode" || command == "paste" || command == "submit" || command == "typeliteral" || command == "presskey" || command == "keydown" || command == "winhotkey" || command == "uia-invoke" || command == "uia-setvalue") && long.TryParse(environmentVariable, out var result) && GetForegroundWindow().ToInt64() != result)
 				{
 					Console.WriteLine("FOCUS_CHANGED:the window in front is no longer the one ORION was working in; nothing was sent|EXPECTED:" + result + "|" + ForegroundInfo());
 					exitCode = 13;
 				}
-				else if ((command == "clickat" || command == "typeunicode" || command == "paste" || command == "submit") && ForegroundBlockedByUipi())
+				else if ((command == "clickat" || command == "drag" || command == "typeunicode" || command == "paste" || command == "submit" || command == "presskey") && ForegroundBlockedByUipi())
 				{
 					Console.WriteLine("UIPI_BLOCKED:foreground window runs as administrator; ORION cannot send input to it|" + ForegroundInfo());
 					exitCode = 12;
@@ -939,15 +1102,38 @@ public static class NativeInputEntry
 							else
 							{
 								Thread.Sleep(30);
-								ClickButton(text12);
+								ClickButtonAt(text12, x, y);
 								if (flag6)
 								{
 									Thread.Sleep(60);
-									ClickButton(text12);
+									ClickButtonAt(text12, x, y);
 								}
 								GetCursorPos(out var lpPoint4);
 								Console.WriteLine("CLICKAT_OK:" + lpPoint4.X + "," + lpPoint4.Y + "|BUTTON:" + text12 + (flag6 ? "|DOUBLE" : "") + "|" + ForegroundInfo());
 							}
+						}
+						break;
+					case "mousedown":
+					case "mouseup":
+					{
+						string btn = ((args.Length > 1) ? args[1].ToLowerInvariant() : "left");
+						if (btn != "right" && btn != "middle")
+						{
+							btn = "left";
+						}
+						MouseButton(btn, command == "mousedown");
+						Console.WriteLine((command == "mousedown" ? "MOUSEDOWN_OK:" : "MOUSEUP_OK:") + btn);
+						break;
+					}
+					case "drag":
+						if (args.Length < 5)
+						{
+							Console.WriteLine("ERR_INVALID_ARGS: drag requires <x1> <y1> <x2> <y2> [button]");
+							exitCode = 2;
+						}
+						else
+						{
+							exitCode = Drag(int.Parse(args[1]), int.Parse(args[2]), int.Parse(args[3]), int.Parse(args[4]), (args.Length > 5) ? args[5].ToLowerInvariant() : "left");
 						}
 						break;
 					case "doubleclick":
@@ -1091,16 +1277,26 @@ public static class NativeInputEntry
 						else
 						{
 							string text10 = args[1];
-							byte b3 = ResolveVirtualKey(text10);
-							if (b3 != 0 && !text10.Contains("^") && !text10.Contains("%") && !text10.Contains("+"))
+							List<byte> chordMods = new List<byte>();
+							byte chordKey;
+							string literal;
+							string chordErr;
+							if (!ParseChord(text10, chordMods, out chordKey, out literal, out chordErr))
 							{
-								Tap(b3);
+								// Never fall back to typing the key name as text ("ctrl+s" -> "ctrlS").
+								Console.WriteLine("ERR_INVALID_KEY:" + text10 + "|" + chordErr);
+								exitCode = 2;
+							}
+							else if (literal != null)
+							{
+								TypeUnicode(literal);
+								Console.WriteLine("KEY_OK:" + text10 + "|CHAR");
 							}
 							else
 							{
-								SendKeys.SendWait(text10);
+								SendChord(chordMods, chordKey);
+								Console.WriteLine("KEY_OK:" + text10 + "|VK:" + chordKey + "|MODS:" + string.Join(",", chordMods));
 							}
-							Console.WriteLine("KEY_OK:" + text10);
 						}
 						break;
 					case "keydown":
@@ -1205,167 +1401,17 @@ public static class NativeInputEntry
 						Console.WriteLine("RELEASEALL_OK:" + ReleaseAll());
 						break;
 					case "uia-list":
-					{
-						int num10 = ((args.Length > 1) ? int.Parse(args[1]) : 60);
-						AutomationElement val4 = AutomationElement.FromHandle(GetForegroundWindow());
-						if (val4 == (AutomationElement)null)
-						{
-							Console.WriteLine("UIA_LIST_EMPTY");
-							exitCode = 8;
-						}
-						else
-						{
-							int num11 = 0;
-							foreach (AutomationElement item in val4.FindAll((TreeScope)4, Condition.TrueCondition))
-							{
-								AutomationElement val5 = item;
-								if (num11 >= num10)
-								{
-									break;
-								}
-								try
-								{
-									AutomationElement.AutomationElementInformation current2 = val5.Current;
-									if (IsInteractive(current2.ControlType) && !current2.IsOffscreen && current2.IsEnabled)
-									{
-										string text8 = current2.Name ?? "";
-										if (text8.Trim().Length != 0 || current2.ControlType == ControlType.Edit)
-										{
-											Rect boundingRectangle2 = current2.BoundingRectangle;
-											if (!boundingRectangle2.IsEmpty && !(boundingRectangle2.Width < 2.0) && !(boundingRectangle2.Height < 2.0))
-											{
-												Console.WriteLine("{\"id\":" + num11 + ",\"name\":\"" + JsonEsc(text8) + "\",\"role\":\"" + ((AutomationIdentifier)current2.ControlType).ProgrammaticName.Replace("ControlType.", "") + "\",\"x\":" + (int)(boundingRectangle2.X + boundingRectangle2.Width / 2.0) + ",\"y\":" + (int)(boundingRectangle2.Y + boundingRectangle2.Height / 2.0) + ",\"w\":" + (int)boundingRectangle2.Width + ",\"h\":" + (int)boundingRectangle2.Height + ",\"password\":" + (current2.IsPassword ? "true" : "false") + "}");
-												num11++;
-											}
-										}
-									}
-								}
-								catch
-								{
-								}
-							}
-							Console.WriteLine("UIA_LIST_OK:" + num11 + "|" + ForegroundInfo());
-						}
+						exitCode = RunUia(() => Uia.List(args));
 						break;
-					}
 					case "uia-invoke":
-						if (args.Length < 2)
-						{
-							Console.WriteLine("ERR_INVALID_ARGS: uia-invoke requires <base64 name>");
-							exitCode = 2;
-						}
-						else
-						{
-							string text7 = FromB64(args[1]);
-							AutomationElement val3 = FindByName(text7, 3000);
-							object obj6 = default(object);
-							if (val3 == (AutomationElement)null)
-							{
-								Console.WriteLine("UIA_NOT_FOUND:" + text7.Replace("|", "/") + "|" + ForegroundInfo());
-								exitCode = 8;
-							}
-							else if (val3.TryGetCurrentPattern(InvokePattern.Pattern, out obj6))
-							{
-								((InvokePattern)obj6).Invoke();
-								Console.WriteLine("UIA_INVOKE_OK:" + Describe(val3) + "|VIA:INVOKE");
-							}
-							else if (val3.TryGetCurrentPattern(TogglePattern.Pattern, out obj6))
-							{
-								((TogglePattern)obj6).Toggle();
-								Console.WriteLine("UIA_INVOKE_OK:" + Describe(val3) + "|VIA:TOGGLE");
-							}
-							else if (val3.TryGetCurrentPattern(SelectionItemPattern.Pattern, out obj6))
-							{
-								((SelectionItemPattern)obj6).Select();
-								Console.WriteLine("UIA_INVOKE_OK:" + Describe(val3) + "|VIA:SELECT");
-							}
-							else
-							{
-								AutomationElement.AutomationElementInformation current = val3.Current;
-								Rect boundingRectangle = current.BoundingRectangle;
-								if (boundingRectangle.IsEmpty)
-								{
-									Console.WriteLine("UIA_NO_PATTERN:" + Describe(val3));
-									exitCode = 9;
-								}
-								else
-								{
-									int num8 = (int)(boundingRectangle.X + boundingRectangle.Width / 2.0);
-									int num9 = (int)(boundingRectangle.Y + boundingRectangle.Height / 2.0);
-									MoveAbsolute(num8, num9);
-									Thread.Sleep(30);
-									ClickButton("left");
-									Console.WriteLine("UIA_INVOKE_OK:" + Describe(val3) + "|VIA:CLICK@" + num8 + "," + num9);
-								}
-							}
-						}
+						exitCode = RunUia(() => Uia.Invoke(args));
 						break;
 					case "uia-setvalue":
-						if (args.Length < 3)
-						{
-							Console.WriteLine("ERR_INVALID_ARGS: uia-setvalue requires <base64 name> <base64 value>");
-							exitCode = 2;
-						}
-						else
-						{
-							string text14 = FromB64(args[1]);
-							string text15 = FromB64(args[2]);
-							AutomationElement val6 = FindByName(text14, 3000);
-							if (val6 == (AutomationElement)null)
-							{
-								Console.WriteLine("UIA_NOT_FOUND:" + text14.Replace("|", "/") + "|" + ForegroundInfo());
-								exitCode = 8;
-							}
-							else
-							{
-								object obj9 = default(object);
-								if (val6.TryGetCurrentPattern(ValuePattern.Pattern, out obj9))
-								{
-									ValuePattern.ValuePatternInformation current3 = ((ValuePattern)obj9).Current;
-									if (!current3.IsReadOnly)
-									{
-										((ValuePattern)obj9).SetValue(text15);
-										Thread.Sleep(80);
-										current3 = ((ValuePattern)obj9).Current;
-										string text16 = current3.Value ?? "";
-										if (text16 == text15)
-										{
-											Console.WriteLine("UIA_SETVALUE_OK:" + Describe(val6) + "|VERIFIED:TRUE");
-										}
-										else
-										{
-											Console.WriteLine("UIA_SETVALUE_MISMATCH:" + Describe(val6) + "|VERIFIED:FALSE");
-											exitCode = 10;
-										}
-										break;
-									}
-								}
-								Console.WriteLine("UIA_NOT_EDITABLE:" + Describe(val6));
-								exitCode = 9;
-							}
-						}
+						exitCode = RunUia(() => Uia.SetValue(args));
 						break;
 					case "uia-focused-value":
-					{
-						string text11 = null;
-						try
-						{
-							text11 = FocusedValue();
-						}
-						catch
-						{
-						}
-						if (text11 == null)
-						{
-							Console.WriteLine("UIA_FOCUSED_NOVALUE|" + ForegroundInfo());
-							exitCode = 11;
-						}
-						else
-						{
-							Console.WriteLine("UIA_FOCUSED_VALUE:" + Convert.ToBase64String(Encoding.UTF8.GetBytes(text11)));
-						}
+						exitCode = RunUia(() => Uia.FocusedValueCmd(args));
 						break;
-					}
 					case "screenshot":
 						if (args.Length < 2)
 						{
@@ -1434,4 +1480,323 @@ public static class NativeInputEntry
 		}
 		return exitCode;
 	}
+}
+// UI Automation lives in its own class so that a machine without
+// UIAutomationClient (Windows Server Core, Wine, trimmed images) can still use
+// keyboard and mouse. The CLR only loads that assembly when a method here runs.
+public static class Uia
+{
+	internal static bool IsInteractive(ControlType t)
+	{
+		if (t != ControlType.Button && t != ControlType.Edit && t != ControlType.Hyperlink && t != ControlType.CheckBox && t != ControlType.RadioButton && t != ControlType.ComboBox && t != ControlType.MenuItem && t != ControlType.ListItem && t != ControlType.TabItem && t != ControlType.Document && t != ControlType.SplitButton)
+		{
+			return t == ControlType.TreeItem;
+		}
+		return true;
+	}
+
+	internal static AutomationElement FindByName(string name, int timeoutMs)
+	{
+		AutomationElement val = AutomationElement.FromHandle(NativeInputEntry.GetForegroundWindow());
+		if (val == (AutomationElement)null)
+		{
+			return null;
+		}
+		DateTime dateTime = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+		string text = name.Trim().ToLowerInvariant();
+		do
+		{
+			AutomationElementCollection val2 = val.FindAll((TreeScope)4, Condition.TrueCondition);
+			AutomationElement val3 = null;
+			foreach (AutomationElement item in val2)
+			{
+				AutomationElement val4 = item;
+				string text2;
+				try
+				{
+					AutomationElement.AutomationElementInformation current = val4.Current;
+					text2 = (current.Name ?? "").Trim().ToLowerInvariant();
+				}
+				catch
+				{
+					continue;
+				}
+				if (text2.Length == 0)
+				{
+					continue;
+				}
+				bool flag = true;
+				try
+				{
+					AutomationElement.AutomationElementInformation current2 = val4.Current;
+					int num;
+					if (current2.IsEnabled)
+					{
+						AutomationElement.AutomationElementInformation current3 = val4.Current;
+						num = ((!current3.IsOffscreen) ? 1 : 0);
+					}
+					else
+					{
+						num = 0;
+					}
+					flag = (byte)num != 0;
+				}
+				catch
+				{
+				}
+				if (flag)
+				{
+					if (text2 == text)
+					{
+						return val4;
+					}
+					if (val3 == (AutomationElement)null && text2.Contains(text))
+					{
+						val3 = val4;
+					}
+				}
+			}
+			if (val3 != (AutomationElement)null)
+			{
+				return val3;
+			}
+			Thread.Sleep(150);
+		}
+		while (DateTime.UtcNow < dateTime);
+		return null;
+	}
+
+	internal static string Describe(AutomationElement el)
+	{
+		try
+		{
+			AutomationElement.AutomationElementInformation current = el.Current;
+			string text = (current.Name ?? "").Replace("|", "/");
+			AutomationElement.AutomationElementInformation current2 = el.Current;
+			return "NAME:" + text + "|TYPE:" + ((AutomationIdentifier)current2.ControlType).ProgrammaticName.Replace("ControlType.", "");
+		}
+		catch
+		{
+			return "NAME:?|TYPE:?";
+		}
+	}
+
+	internal static string FocusedValue()
+	{
+		AutomationElement focusedElement = AutomationElement.FocusedElement;
+		if (focusedElement == (AutomationElement)null)
+		{
+			return null;
+		}
+		object obj = default(object);
+		if (focusedElement.TryGetCurrentPattern(ValuePattern.Pattern, out obj))
+		{
+			ValuePattern.ValuePatternInformation current = ((ValuePattern)obj).Current;
+			return current.Value ?? "";
+		}
+		if (focusedElement.TryGetCurrentPattern(TextPattern.Pattern, out obj))
+		{
+			return ((TextPattern)obj).DocumentRange.GetText(20000) ?? "";
+		}
+		return null;
+	}
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static int List(string[] args)
+	{
+		int ec = 0;
+		do {
+					{
+						int num10 = ((args.Length > 1) ? int.Parse(args[1]) : 60);
+						AutomationElement val4 = AutomationElement.FromHandle(NativeInputEntry.GetForegroundWindow());
+						if (val4 == (AutomationElement)null)
+						{
+							Console.WriteLine("UIA_LIST_EMPTY");
+							ec = 8;
+						}
+						else
+						{
+							int num11 = 0;
+							foreach (AutomationElement item in val4.FindAll((TreeScope)4, Condition.TrueCondition))
+							{
+								AutomationElement val5 = item;
+								if (num11 >= num10)
+								{
+									goto done;
+								}
+								try
+								{
+									AutomationElement.AutomationElementInformation current2 = val5.Current;
+									if (IsInteractive(current2.ControlType) && !current2.IsOffscreen && current2.IsEnabled)
+									{
+										string text8 = current2.Name ?? "";
+										if (text8.Trim().Length != 0 || current2.ControlType == ControlType.Edit)
+										{
+											Rect boundingRectangle2 = current2.BoundingRectangle;
+											if (!boundingRectangle2.IsEmpty && !(boundingRectangle2.Width < 2.0) && !(boundingRectangle2.Height < 2.0))
+											{
+												Console.WriteLine("{\"id\":" + num11 + ",\"name\":\"" + NativeInputEntry.JsonEsc(text8) + "\",\"role\":\"" + ((AutomationIdentifier)current2.ControlType).ProgrammaticName.Replace("ControlType.", "") + "\",\"x\":" + (int)(boundingRectangle2.X + boundingRectangle2.Width / 2.0) + ",\"y\":" + (int)(boundingRectangle2.Y + boundingRectangle2.Height / 2.0) + ",\"w\":" + (int)boundingRectangle2.Width + ",\"h\":" + (int)boundingRectangle2.Height + ",\"password\":" + (current2.IsPassword ? "true" : "false") + "}");
+												num11++;
+											}
+										}
+									}
+								}
+								catch
+								{
+								}
+							}
+							Console.WriteLine("UIA_LIST_OK:" + num11 + "|" + NativeInputEntry.ForegroundInfo());
+						}
+						goto done;
+					}
+		} while (false);
+		done:
+		return ec;
+	}
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static int Invoke(string[] args)
+	{
+		int ec = 0;
+		do {
+						if (args.Length < 2)
+						{
+							Console.WriteLine("ERR_INVALID_ARGS: uia-invoke requires <base64 name>");
+							ec = 2;
+						}
+						else
+						{
+							string text7 = NativeInputEntry.FromB64(args[1]);
+							AutomationElement val3 = FindByName(text7, 3000);
+							object obj6 = default(object);
+							if (val3 == (AutomationElement)null)
+							{
+								Console.WriteLine("UIA_NOT_FOUND:" + text7.Replace("|", "/") + "|" + NativeInputEntry.ForegroundInfo());
+								ec = 8;
+							}
+							else if (val3.TryGetCurrentPattern(InvokePattern.Pattern, out obj6))
+							{
+								((InvokePattern)obj6).Invoke();
+								Console.WriteLine("UIA_INVOKE_OK:" + Describe(val3) + "|VIA:INVOKE");
+							}
+							else if (val3.TryGetCurrentPattern(TogglePattern.Pattern, out obj6))
+							{
+								((TogglePattern)obj6).Toggle();
+								Console.WriteLine("UIA_INVOKE_OK:" + Describe(val3) + "|VIA:TOGGLE");
+							}
+							else if (val3.TryGetCurrentPattern(SelectionItemPattern.Pattern, out obj6))
+							{
+								((SelectionItemPattern)obj6).Select();
+								Console.WriteLine("UIA_INVOKE_OK:" + Describe(val3) + "|VIA:SELECT");
+							}
+							else
+							{
+								AutomationElement.AutomationElementInformation current = val3.Current;
+								Rect boundingRectangle = current.BoundingRectangle;
+								if (boundingRectangle.IsEmpty)
+								{
+									Console.WriteLine("UIA_NO_PATTERN:" + Describe(val3));
+									ec = 9;
+								}
+								else
+								{
+									int num8 = (int)(boundingRectangle.X + boundingRectangle.Width / 2.0);
+									int num9 = (int)(boundingRectangle.Y + boundingRectangle.Height / 2.0);
+									NativeInputEntry.MoveAbsolute(num8, num9);
+									Thread.Sleep(30);
+									NativeInputEntry.ClickButtonAt("left", num8, num9);
+									Console.WriteLine("UIA_INVOKE_OK:" + Describe(val3) + "|VIA:CLICK@" + num8 + "," + num9);
+								}
+							}
+						}
+						goto done;
+		} while (false);
+		done:
+		return ec;
+	}
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static int SetValue(string[] args)
+	{
+		int ec = 0;
+		do {
+						if (args.Length < 3)
+						{
+							Console.WriteLine("ERR_INVALID_ARGS: uia-setvalue requires <base64 name> <base64 value>");
+							ec = 2;
+						}
+						else
+						{
+							string text14 = NativeInputEntry.FromB64(args[1]);
+							string text15 = NativeInputEntry.FromB64(args[2]);
+							AutomationElement val6 = FindByName(text14, 3000);
+							if (val6 == (AutomationElement)null)
+							{
+								Console.WriteLine("UIA_NOT_FOUND:" + text14.Replace("|", "/") + "|" + NativeInputEntry.ForegroundInfo());
+								ec = 8;
+							}
+							else
+							{
+								object obj9 = default(object);
+								if (val6.TryGetCurrentPattern(ValuePattern.Pattern, out obj9))
+								{
+									ValuePattern.ValuePatternInformation current3 = ((ValuePattern)obj9).Current;
+									if (!current3.IsReadOnly)
+									{
+										((ValuePattern)obj9).SetValue(text15);
+										Thread.Sleep(80);
+										current3 = ((ValuePattern)obj9).Current;
+										string text16 = current3.Value ?? "";
+										if (text16 == text15)
+										{
+											Console.WriteLine("UIA_SETVALUE_OK:" + Describe(val6) + "|VERIFIED:TRUE");
+										}
+										else
+										{
+											Console.WriteLine("UIA_SETVALUE_MISMATCH:" + Describe(val6) + "|VERIFIED:FALSE");
+											ec = 10;
+										}
+										goto done;
+									}
+								}
+								Console.WriteLine("UIA_NOT_EDITABLE:" + Describe(val6));
+								ec = 9;
+							}
+						}
+						goto done;
+		} while (false);
+		done:
+		return ec;
+	}
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static int FocusedValueCmd(string[] args)
+	{
+		int ec = 0;
+		do {
+					{
+						string text11 = null;
+						try
+						{
+							text11 = FocusedValue();
+						}
+						catch
+						{
+						}
+						if (text11 == null)
+						{
+							Console.WriteLine("UIA_FOCUSED_NOVALUE|" + NativeInputEntry.ForegroundInfo());
+							ec = 11;
+						}
+						else
+						{
+							Console.WriteLine("UIA_FOCUSED_VALUE:" + Convert.ToBase64String(Encoding.UTF8.GetBytes(text11)));
+						}
+						goto done;
+					}
+		} while (false);
+		done:
+		return ec;
+	}
+
 }
